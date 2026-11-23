@@ -4,8 +4,9 @@
   "version": "1.4.0",
   "type": "module",
   "scripts": {
-    "dev": "wrangler pages dev public",
-    "deploy": "wrangler pages deploy public",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "build": "wrangler pages functions build --outdir=./public/_worker.js/",
     "db:create": "wrangler d1 create qwemu-web",
     "db:migrate:local": "wrangler d1 migrations apply qwemu-web --local",
     "db:migrate:remote": "wrangler d1 migrations apply qwemu-web --remote",
