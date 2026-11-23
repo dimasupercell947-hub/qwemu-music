@@ -1,29 +1,19 @@
 {
-  // Cloudflare Workers configuration for qwemu (migrated from Pages).
-  // Deploy with: npx wrangler deploy
   "name": "qwemu",
   "compatibility_date": "2026-11-01",
-
-  // Compiled Pages Functions (built by `bun run build`)
   "main": "./public/_worker.js/index.js",
-
-  // Static assets from ./public
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application"
   },
-
-  // D1 database used by functions/api/[[path]].js
-  // Replace database_id with the real ID from the dashboard (D1 -> qwemu-web).
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "qwemu-web",
-      "database_id": "PASTE_REAL_DATABASE_ID_HERE"
+      "database_id": "ВСТАВЬТЕ_UUID_ИЗ_wrangler_d1_list"
     }
   ],
-
   "observability": {
     "enabled": true
   }
