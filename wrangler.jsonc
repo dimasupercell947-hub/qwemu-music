@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "qwemu-music-web",
+  "compatibility_date": "2026-11-22",
+  "pages_build_output_dir": ".",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "qwemu-web",
+      "database_id": "SET_AFTER_CREATING_D1_DATABASE",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

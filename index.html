@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0c0b0d">
+  <meta name="description" content="QWEMU MUSIC Web Edition — локальное воспроизведение музыки и синхронизация метаданных по желанию.">
+  <title>QWEMU MUSIC — Web Edition</title>
+  <link rel="stylesheet" href="./assets/app.css">
+  <link rel="stylesheet" href="./assets/minimal-140.css">
+  <script type="module" src="./assets/main.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Основная навигация">
+      <a class="brand" href="#home" aria-label="QWEMU MUSIC — главная"><span class="brand-mark">Q</span><span><b>QWEMU</b><small>MUSIC · WEB</small></span></a>
+      <nav class="nav-list">
+        <button class="nav-item active" data-page="home"><span aria-hidden="true">⌂</span>Главная</button>
+        <button class="nav-item" data-page="library"><span aria-hidden="true">♫</span>Медиатека</button>
+        <button class="nav-item" data-page="playlists"><span aria-hidden="true">▤</span>Плейлисты</button>
+        <button class="nav-item" data-page="favorites"><span aria-hidden="true">♥</span>Избранное</button>
+      </nav>
+      <div class="sidebar-bottom"><div class="privacy-note"><span class="privacy-dot"></span><span>Аудиофайлы остаются в браузере</span></div><button class="nav-item" data-page="settings"><span aria-hidden="true">⚙</span>Настройки</button></div>
+    </aside>
+
+    <main class="main-area">
+      <header class="topbar">
+        <div class="search-wrap"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Поиск по загруженным трекам" autocomplete="off" aria-label="Поиск по медиатеке"><kbd>Ctrl K</kbd></div>
+        <div class="top-actions"><span class="edition-label">WEB EDITION · 1.4.0</span><button id="account-button" class="account-button" type="button">Войти</button></div>
+      </header>
+      <section id="view" class="view" aria-live="polite"></section>
+    </main>
+  </div>
+
+  <section class="player" aria-label="Музыкальный плеер">
+    <div class="now-playing"><div id="cover" class="cover-placeholder">Q</div><div class="track-copy"><b id="player-title">Ничего не воспроизводится</b><span id="player-artist">Добавь аудиофайлы из своей коллекции</span></div></div>
+    <div class="transport"><div class="transport-buttons"><button id="prev" class="icon-button" type="button" aria-label="Предыдущий трек" title="Предыдущий">|◀</button><button id="stop" class="icon-button" type="button" aria-label="Остановить" title="Остановить">■</button><button id="play" class="play-button" type="button" aria-label="Воспроизвести" title="Воспроизвести">▶</button><button id="next" class="icon-button" type="button" aria-label="Следующий трек" title="Следующий">▶|</button><button id="repeat" class="icon-button" type="button" aria-label="Включить повтор" title="Повтор">↻</button></div><div class="timeline"><span id="elapsed">0:00</span><input id="seek" type="range" min="0" max="1000" value="0" aria-label="Позиция воспроизведения"><span id="duration">0:00</span></div></div>
+    <div class="volume-control"><button id="mute" class="icon-button" type="button" aria-label="Отключить звук" title="Отключить звук">◖))</button><input id="volume" type="range" min="0" max="1" step="0.01" value="0.8" aria-label="Громкость"></div>
+    <audio id="audio" preload="metadata"></audio>
+  </section>
+
+  <dialog id="auth-dialog" class="dialog-card">
+    <form id="auth-form" method="dialog" class="dialog-content">
+      <button type="button" class="dialog-close" data-action="close-auth" aria-label="Закрыть">×</button>
+      <div class="eyebrow">QWEMU ACCOUNT</div><h2 id="auth-heading">Вход в QWEMU</h2><p class="muted">Аккаунт нужен только для синхронизации метаданных. Музыкальные файлы не загружаются.</p>
+      <label>Имя пользователя<input id="auth-username" name="username" minlength="3" maxlength="20" required autocomplete="username" pattern="[a-zA-Z0-9_]+"></label>
+      <label id="display-label" class="hidden">Отображаемое имя<input id="auth-display" name="displayName" maxlength="32" autocomplete="name"></label>
+      <label id="email-label" class="hidden">Электронная почта<input id="auth-email" name="email" type="email" maxlength="160" autocomplete="email"></label>
+      <label>Пароль<input id="auth-password" name="password" type="password" minlength="8" maxlength="128" required autocomplete="current-password"></label>
+      <p id="auth-error" class="form-error" role="alert"></p>
+      <button id="auth-submit" class="primary-button" type="submit">Войти</button>
+      <button id="auth-switch" class="text-button" type="button" data-action="switch-register">Создать аккаунт</button>
+    </form>
+  </dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
