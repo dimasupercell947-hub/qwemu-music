@@ -11,7 +11,7 @@
     {
       "binding": "DB",
       "database_name": "qwemu-web",
-      "database_id": "ВСТАВЬТЕ_UUID_ИЗ_wrangler_d1_list"
+      "database_id": "f8cbf530-b728-422d-9bee-a13d8914c3b0"
     }
   ],
   "observability": {
