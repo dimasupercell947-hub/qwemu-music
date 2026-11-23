@@ -1,14 +1,16 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "qwemu-music-web",
-  "compatibility_date": "2026-11-22",
-  "pages_build_output_dir": "./public",
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "qwemu-web",
-      "database_id": "00000000-0000-0000-0000-000000000000",
-      "migrations_dir": "migrations"
-    }
-  ]
+  // Cloudflare Workers configuration for the qwemu static site.
+  // Deploy with: npx wrangler deploy
+  "name": "qwemu",
+  "compatibility_date": "2026-11-01",
+
+  // Static assets are served straight from ./web (no Worker script needed).
+  "assets": {
+    "directory": "./web",
+    "not_found_handling": "single-page-application"
+  },
+
+  "observability": {
+    "enabled": true
+  }
 }
