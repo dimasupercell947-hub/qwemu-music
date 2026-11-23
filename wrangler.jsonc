@@ -2,12 +2,12 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "qwemu-music-web",
   "compatibility_date": "2026-11-22",
-  "pages_build_output_dir": ".",
+  "pages_build_output_dir": "./public",
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "qwemu-web",
-      "database_id": "SET_AFTER_CREATING_D1_DATABASE",
+      "database_id": "00000000-0000-0000-0000-000000000000",
       "migrations_dir": "migrations"
     }
   ]

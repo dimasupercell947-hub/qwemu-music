@@ -1,0 +1,2 @@
+# Только локальная разработка. Создай случайное значение.
+RATE_LIMIT_SECRET=replace-with-a-long-random-secret

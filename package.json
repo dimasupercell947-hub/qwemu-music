@@ -1,12 +1,16 @@
 {
-  "name": "qwemu-music-web-edition",
+  "name": "qwemu-music-cloudflare",
   "private": true,
   "version": "1.4.0",
   "type": "module",
   "scripts": {
-    "dev": "wrangler pages dev .",
-    "deploy": "wrangler pages deploy .",
-    "test": "node ../tools/test-web-edition.mjs"
+    "dev": "wrangler pages dev public",
+    "deploy": "wrangler pages deploy public",
+    "db:create": "wrangler d1 create qwemu-web",
+    "db:migrate:local": "wrangler d1 migrations apply qwemu-web --local",
+    "db:migrate:remote": "wrangler d1 migrations apply qwemu-web --remote",
+    "test": "node tests/smoke.mjs",
+    "check": "node --check functions/api/[[path]].js && node --check public/assets/main.js && node --check public/assets/api-adapter.js && node --check public/assets/auth-adapter.js && node --check public/assets/audio-adapter.js && node tests/smoke.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"

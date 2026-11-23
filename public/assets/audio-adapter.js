@@ -38,25 +38,3 @@ export class BrowserAudioAdapter {
   destroy() { this.pause(); this.element.removeAttribute('src'); this.element.load(); this.revokeObjectUrl(); for (const [type,handler] of this.handlers) this.element.removeEventListener(type,handler); this.handlers.clear(); this.listeners.clear(); }
 }
 
-// The desktop adapter is intentionally separate: it uses Rust commands and never
-// replaces the existing Rodio worker with a browser-side audio pipeline.
-export class DesktopAudioAdapter {
-  constructor(invoke) {
-    if (typeof invoke !== 'function') throw new TypeError('Tauri invoke недоступен.');
-    this.invoke = invoke;
-  }
-  play(track) { if (!track?.nativePath) throw new Error('У композиции нет нативного пути QWEMU.'); return this.invoke('audio_play', { path: track.nativePath }); }
-  pause() { return this.invoke('audio_pause'); }
-  resume() { return this.invoke('audio_resume'); }
-  stop() { return this.invoke('audio_stop'); }
-  seek(seconds) { return this.invoke('audio_seek', { seconds: Number(seconds) }); }
-  setVolume(value) { return this.invoke('audio_set_volume', { value: Number(value) }); }
-  setEqualizer(enabled, bands) { return this.invoke('audio_set_eq', { enabled: Boolean(enabled), bands }); }
-  getStatus() { return this.invoke('audio_status'); }
-}
-
-export function createAudioAdapter(element) {
-  const core = globalThis.__TAURI__?.core;
-  const invoke = typeof core?.invoke === 'function' ? core.invoke.bind(core) : null;
-  return invoke ? new DesktopAudioAdapter(invoke) : new BrowserAudioAdapter(element);
-}
