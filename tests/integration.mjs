@@ -76,7 +76,7 @@ try {
   await waitForServer(server);
 
   const health = await jsonRequest('/api/health');
-  check(health.response.status === 200 && health.payload.databaseReady === true && health.payload.rateLimitConfigured === true, 'D1 health-check должен подтверждать реальный SELECT');
+  check(health.response.status === 200 && health.payload.databaseReady === true && health.payload.rateLimitConfigured === true && health.payload.rateLimitStrong === true, 'D1 health-check должен подтверждать реальный SELECT');
 
   const unknownApi = await jsonRequest('/api/__not_found__');
   check(unknownApi.response.status === 404 && typeof unknownApi.payload.error === 'string', 'Неизвестный API route должен возвращать JSON 404');
