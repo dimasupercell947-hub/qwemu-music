@@ -61,33 +61,17 @@ npm run dev
 
 ## 2. Создание D1 и подготовка production
 
-Создай базу:
+Создай базу в своём Cloudflare аккаунте:
 
 ```bash
 npm run db:create
 ```
 
-Wrangler выведет настоящий `database_id`. Скопируй его в `wrangler.jsonc` вместо нулевого UUID:
+Сохрани выданный `database_id`. Для рекомендуемого GitHub Actions workflow не нужно записывать production UUID в `wrangler.jsonc`: добавь его как GitHub Secret `CLOUDFLARE_D1_DATABASE_ID`. Временный Wrangler config создаётся перед deploy из этого секрета. `preview_database_id` оставь без изменений — он используется локальным тестовым хранилищем.
 
-```json
-"database_id": "UUID_ИЗ_ВЫВОДА_WRANGLER"
-```
+Удалённые миграции и production secret настраиваются workflow автоматически. Не запускай `npm run db:migrate:remote` отдельно перед первым deploy: GitHub Actions сначала проверяет Cloudflare credentials и `workers.dev`, а затем применяет миграции к D1.
 
-Нулевой UUID в `database_id` — шаблон, его обязательно заменить реальным значением из вывода Wrangler. `preview_database_id` оставь без изменений: он используется только для локального хранилища.
-
-Примени миграции к production D1:
-
-```bash
-npm run db:migrate:remote
-```
-
-Создай production secret:
-
-```bash
-npx wrangler secret put RATE_LIMIT_SECRET
-```
-
-Введи длинное случайное значение. Оно не должно совпадать с локальным значением из `.dev.vars`. Не добавляй секрет в Git, `.env`, `wrangler.jsonc` или frontend-код.
+Для ручного CLI-развёртывания (альтернативный путь) можно указать настоящий `database_id` в `wrangler.jsonc`, отдельно применить миграции командой `npm run db:migrate:remote` и создать secret командой `npx wrangler secret put RATE_LIMIT_SECRET`. Этот способ не нужен при использовании GitHub Actions; не запускай оба сценария параллельно.
 
 ## 3. Проверка и публикация Workers
 
@@ -117,14 +101,13 @@ npm run deploy
 
 Перед публикацией выполняются сборка Worker, синтаксические проверки, smoke-тесты и проверка настоящего D1 ID. Затем запускается `wrangler deploy`.
 
-В Cloudflare Dashboard имя Worker должно быть **`qwemu-music`** — оно должно совпадать с `name` в `wrangler.jsonc`. В настройках Worker → **Settings → Builds** укажи:
+В Cloudflare Dashboard имя Worker должно быть **`qwemu-music`** — оно должно совпадать с `name` в `wrangler.jsonc`. Рекомендуемый production deploy выполняется через GitHub Actions (раздел 4), где D1 ID и секреты безопасно передаются через GitHub Secrets.
 
-- Root directory: `/` (корень репозитория).
-- Build command: `npm run build`.
-- Deploy command: `npm run deploy` (выполняет полный набор проверок и проверяет настоящий D1 UUID перед публикацией).
-- В Cloudflare должен быть подключён именно Worker `qwemu-music`, а не Pages-проект с тем же репозиторием.
+Не включай одновременно автоматическую публикацию из Cloudflare Workers Builds и production workflow GitHub Actions: это создаёт два независимых deploy-процесса. Для GitHub Actions не используй `npm run deploy` в Cloudflare Deploy command. Если Cloudflare Builds нужен только для preview, настрой для него отдельную preview-конфигурацию и preview D1; production `database_id` и production secrets не должны использоваться в preview.
 
-Затем проверь binding `DB` (D1 `qwemu-web`) и secret `RATE_LIMIT_SECRET`. Для собственного домена подключи Custom Domain в настройках Worker.
+Ручная команда `npm run deploy` остаётся доступна для уже настроенного Wrangler профиля: с настоящим production `database_id` и заранее созданным `RATE_LIMIT_SECRET` в Cloudflare. Для первой production установки используй GitHub Actions workflow.
+
+Для собственного домена подключи Custom Domain в настройках Worker.
 
 ## Маршрутизация и заголовки
 
