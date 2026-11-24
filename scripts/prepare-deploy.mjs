@@ -19,7 +19,7 @@ export function buildDeployConfig(baseConfig, env) {
     throw new Error('CLOUDFLARE_D1_DATABASE_ID отсутствует или не является настоящим UUID D1.');
   }
   if (new TextEncoder().encode(rateLimitSecret).byteLength < 32 || rateLimitSecret.trim() !== rateLimitSecret) {
-    throw new Error('RATE_LIMIT_SECRET должен содержать не менее 32 байт.');
+    throw new Error('RATE_LIMIT_SECRET должен содержать не менее 32 байт и не иметь пробелов по краям.');
   }
 
   const config = JSON.parse(JSON.stringify(baseConfig));
