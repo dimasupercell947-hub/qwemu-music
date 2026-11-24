@@ -32,6 +32,7 @@ for (const route of ['/api/health', '/api/auth/register', '/api/auth/login', '/a
 }
 assert.match(api, /RATE_LIMIT_SECRET/, 'Не найдена защита rate limit');
 assert.match(api, /rateLimitConfigured/, 'Health check должен проверять конфигурацию rate limit');
+assert.match(api, /rateLimitStrong/, 'Health check должен сообщать силу секрета без блокировки старых непустых секретов');
 assert.match(api, /X-QWEMU-CSRF/, 'Не найдена CSRF-проверка');
 assert.match(api, /HttpOnly; Secure; SameSite=Lax/, 'Неправильные атрибуты session cookie');
 
@@ -69,6 +70,7 @@ assert.ok(assetsIgnore.split(/\r?\n/g).includes('_headers'), 'Служебный
 assert.equal(await exists('dist/worker/index.js'), true, 'Не найден сгенерированный Worker bundle');
 assert.equal(await exists('scripts/check-deploy.mjs'), true, 'Отсутствует pre-deploy validation');
 assert.equal(await exists('scripts/prepare-deploy.mjs'), true, 'Отсутствует безопасная подготовка production config');
+assert.equal(await exists('scripts/check-cloudflare.mjs'), true, 'Отсутствует Cloudflare preflight');
 assert.equal(await exists('.github/workflows/deploy.yml'), true, 'Отсутствует workflow production deploy');
 console.log('QWEMU Cloudflare smoke tests: PASS');
 console.log('Проверено: HTML, локальные ресурсы, JS imports, API routes/security markers, Workers routing, D1 config/schema, headers и Worker bundle.');
