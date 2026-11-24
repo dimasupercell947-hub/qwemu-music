@@ -115,7 +115,7 @@ function testDeployConfig() {
   assert.throws(() => buildDeployConfig(source, { ...env, CLOUDFLARE_D1_DATABASE_ID: zeroId }), /настоящим UUID/);
   assert.throws(() => buildDeployConfig(source, { ...env, CLOUDFLARE_ACCOUNT_ID: 'bad' }), /ACCOUNT_ID/);
   assert.throws(() => buildDeployConfig(source, { ...env, RATE_LIMIT_SECRET: 'short' }), /32 байт/);
-  assert.throws(() => buildDeployConfig(source, { ...env, RATE_LIMIT_SECRET: secret + '   ' }), /32 байт и без пробелов/);
+  assert.throws(() => buildDeployConfig(source, { ...env, RATE_LIMIT_SECRET: secret + '   ' }), /32 байт и не иметь пробелов по краям/);
 }
 
 async function testFingerprint() {
