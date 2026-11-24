@@ -13,7 +13,7 @@ if (!validUuid || uuid === '00000000-0000-0000-0000-000000000000') {
   console.error('DEPLOY BLOCKED: укажи настоящий database_id из Cloudflare D1 в wrangler.jsonc.');
   process.exit(1);
 }
-if (!config.main || !config.assets?.directory || !config.assets?.run_worker_first?.includes('/api/*')) {
+if (config.name !== 'qwemu-music' || !config.main || !config.assets?.directory || !config.assets?.run_worker_first?.includes('/api/*')) {
   console.error('DEPLOY BLOCKED: конфигурация Worker/Static Assets неполная.');
   process.exit(1);
 }
