@@ -51,7 +51,7 @@ async function derivePassword(password,salt) {
   return base64url(new Uint8Array(bits));
 }
 async function rateAllowed(request,env,scope) {
-  if(!env.DB || typeof env.RATE_LIMIT_SECRET !== 'string' || encoder.encode(env.RATE_LIMIT_SECRET).byteLength < 32)throw new Error('Auth backend is not configured.');
+  if(!env.DB || typeof env.RATE_LIMIT_SECRET !== 'string' || env.RATE_LIMIT_SECRET.length === 0)throw new Error('Auth backend is not configured.');
   const address=request.headers.get('CF-Connecting-IP')||'unknown';
   const key=await digest(`${env.RATE_LIMIT_SECRET}:${scope}:${address}`);
   const minute=Math.floor(Date.now()/60_000);
@@ -128,12 +128,14 @@ async function handle(request,env) {
   const url=new URL(request.url);const path=url.pathname;const method=request.method.toUpperCase();
   if(method==='GET'&&path==='/api/health') {
     if(!env.DB)return fail(503,'D1 database binding не настроен.');
-    const rateLimitConfigured = typeof env.RATE_LIMIT_SECRET === 'string'
-      && encoder.encode(env.RATE_LIMIT_SECRET).byteLength >= 32;
-    if(!rateLimitConfigured)return fail(503,'RATE_LIMIT_SECRET отсутствует или короче 32 байт.');
+    const rateLimitConfigured = typeof env.RATE_LIMIT_SECRET === 'string' && env.RATE_LIMIT_SECRET.length > 0;
+    const rateLimitStrong = rateLimitConfigured
+      && encoder.encode(env.RATE_LIMIT_SECRET).byteLength >= 32
+      && env.RATE_LIMIT_SECRET === env.RATE_LIMIT_SECRET.trim();
+    if(!rateLimitConfigured)return fail(503,'RATE_LIMIT_SECRET не настроен.');
     try {
       await env.DB.prepare('SELECT 1 AS ready').first();
-      return json({ok:true,service:'QWEMU Web API',version:'1.4.0',databaseConfigured:true,databaseReady:true,rateLimitConfigured:true});
+      return json({ok:true,service:'QWEMU Web API',version:'1.4.0',databaseConfigured:true,databaseReady:true,rateLimitConfigured:true,rateLimitStrong});
     } catch {
       return fail(503,'D1 database недоступна.');
     }
