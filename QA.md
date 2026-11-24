@@ -128,7 +128,7 @@ GitHub Actions выполняет `npm run check` и `npm run test:integration` 
 
 Подтверждается исходниками: реализация CAS, Workers config, local test runner, smoke/unit/integration tests.
 
-PASS для полной команды npm run check ставится только по GitHub Actions на текущем HEAD, отдельно для Linux и Windows. Результат старого коммита нельзя переносить на новый.
+PASS для npm run check и npm run test:integration фиксируется отдельно только по GitHub Actions на текущем HEAD, отдельно для Linux и Windows. Результат старого коммита нельзя переносить на новый.
 
 Не выполнялось этим аудитом: production deploy, удалённые D1 migrations, реальная регистрация в Cloudflare, браузерное E2E, мобильное воспроизведение и тарифные лимиты CPU. Эти пункты нельзя считать PASS без отдельной проверки.
 
