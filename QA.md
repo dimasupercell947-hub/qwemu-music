@@ -161,7 +161,8 @@ Workflow выполняет:
 3. Создание временного `wrangler.deploy.jsonc` без записи RATE_LIMIT_SECRET.
 4. Проверку авторизации Wrangler.
 5. Remote D1 migrations.
-6. Публикацию Worker/Static Assets и передачу RATE_LIMIT_SECRET через stdin.
-7. Необязательную проверку production `/api/health`, если задан health_url.
+6. Публикацию Worker/Static Assets.
+7. Передачу RATE_LIMIT_SECRET через stdin (Wrangler создаёт новую версию Worker).
+8. Необязательную проверку production `/api/health`, которая подтверждает D1 и rate-limit secret.
 
 Production deployment не считается проверенным до успешного запуска workflow в аккаунте пользователя. Удалённые миграции, доступность Worker и CPU budget не подтверждаются локальными тестами.
