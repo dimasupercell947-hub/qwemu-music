@@ -1,99 +1,123 @@
 # QWEMU MUSIC 1.4.0 — Cloudflare Web Edition
 
-Самостоятельный проект браузерной версии QWEMU MUSIC. Не содержит Desktop/Tauri/Rust, Windows BAT-файлов и файлов, не нужных для публикации сайта.
+Отдельная браузерная версия QWEMU MUSIC на Cloudflare Workers + Static Assets + D1. Desktop-приложение Tauri/Rust не входит в этот проект.
 
-## Состав
+## Архитектура
 
-- `public/` — готовый сайт и его локальные CSS/JS-ресурсы.
-- `functions/api/[[path]].js` — Cloudflare Pages Functions API.
-- `migrations/0001_initial.sql` — схема Cloudflare D1.
-- `wrangler.jsonc` — конфигурация Pages и D1.
-- `tests/` — автономная smoke-проверка пакета.
+- `public/` — статический сайт, CSS, JS и правила заголовков Workers.
+- `functions/api/[[path]].js` — API авторизации и синхронизации, собирается Wrangler в Worker.
+- `dist/worker/` — генерируемый Worker bundle; не хранится в Git и не раздаётся как публичный файл.
+- `migrations/` — миграции Cloudflare D1.
+- `wrangler.jsonc` — единая конфигурация Worker, Static Assets и D1.
+- `tests/` — локальные smoke-проверки.
 
-Музыкальные файлы выбираются пользователем и воспроизводятся в браузере. Они не загружаются в Cloudflare. В D1 сохраняются учётная запись и метаданные: плейлисты, избранное и настройки.
-
-## Важно: это не сборка Windows EXE
-
-Cloudflare Edition — отдельный браузерный сайт. Для него не запускаются `cargo`, `tauri build` или компилятор Rust; пакет не использует `cpal` и `rodio`. Воспроизведение выполняет браузер через HTML Audio.
-
-Если в журнале Cloudflare появляется ошибка `failed to run custom build command for cpal` или `Access is denied (os error 5)`, выбрана папка Desktop-проекта либо задана неправильная команда сборки. Для этого сайта в Cloudflare Pages выставь:
-
-- Root directory — папка, где лежат этот `package.json` и `wrangler.jsonc`.
-- Framework preset — `None`.
-- Build command — пусто (это готовый статический сайт, сборочный шаг не нужен).
-- Build output directory — `public`.
-
-Не указывай `npm run tauri build`, `cargo build` или путь `src-tauri`. Каталог `functions/` должен находиться рядом с `public/` в корне Pages-проекта, чтобы Cloudflare обнаружил API Functions.
+Аудиофайлы выбираются пользователем и воспроизводятся браузером через HTML Audio. Они не загружаются в Cloudflare. В D1 сохраняются только учётные записи, сессии и метаданные (плейлисты, избранное, настройки).
 
 ## Требования
 
-- Node.js LTS и npm.
-- Аккаунт Cloudflare.
-- Wrangler 4 (устанавливается через `npm install`).
+- Node.js 22 LTS или новее.
+- npm.
+- Аккаунт Cloudflare с Workers и D1.
+- Wrangler 4 (устанавливается через npm).
 
-## Локальный запуск
+## 1. Установка и локальная настройка
+
+В корне проекта:
 
 ```bash
 npm install
-npm run check
 npx wrangler login
-npx wrangler pages dev public
 ```
 
-Для локальной работы API создай `.dev.vars` на основе `.dev.vars.example`, затем создай локальную D1-базу и примени миграцию:
+Создай локальный файл секретов:
 
 ```bash
-npx wrangler d1 create qwemu-web
-npx wrangler d1 migrations apply qwemu-web --local
+copy .dev.vars.example .dev.vars
 ```
 
-После `d1 create` сохрани выданный `database_id` и внеси его в `wrangler.jsonc`. Не публикуй секреты и файл `.dev.vars`.
+Открой `.dev.vars` и замени пример на длинное случайное значение `RATE_LIMIT_SECRET`. Файл `.dev.vars` игнорируется Git и не должен публиковаться.
 
-## Публикация в Cloudflare Pages
+Создай локальную D1-базу и примени миграции:
 
-1. Создай D1 database с именем `qwemu-web`:
-   ```bash
-   npx wrangler d1 create qwemu-web
-   ```
-2. Скопируй выданный Cloudflare `database_id` в `wrangler.jsonc` вместо нулевого шаблонного UUID.
-3. Примени миграцию к удалённой базе:
-   ```bash
-   npx wrangler d1 migrations apply qwemu-web --remote
-   ```
-4. Создай секрет для API:
-   ```bash
-   npx wrangler pages secret put RATE_LIMIT_SECRET --project-name qwemu-music-web
-   ```
-   Введи длинное случайное значение. Не добавляй его в Git, `.env`, frontend-код или `wrangler.jsonc`.
-5. Войди в Cloudflare:
-   ```bash
-   npx wrangler login
-   ```
-6. Опубликуй сайт:
-   ```bash
-   npm run deploy
-   ```
-   При первом запуске Wrangler предложит создать Pages project `qwemu-music-web`.
-7. В Cloudflare Dashboard → Workers & Pages → `qwemu-music-web` → Settings → Bindings проверь D1 binding `DB`, указывающий на `qwemu-web`. Если binding не создан автоматически из `wrangler.jsonc`, добавь его вручную и сделай повторный deploy.
-8. Проверь `https://<твой-домен>/api/health`, затем регистрацию, вход, выход и синхронизацию тестового аккаунта.
+```bash
+npm run db:migrate:local
+```
 
-## GitHub + Cloudflare Pages
+Для первого локального запуска Wrangler создаст локальную базу автоматически. Если Wrangler сообщит, что база не найдена, сначала выполни `npm run db:create` только для удалённой базы после входа в Cloudflare и настрой её ID, как описано ниже; для локальной базы используй команду миграций с флагом `--local`.
 
-- Framework preset: `None`.
-- Root directory: `/` (корень этого отдельного проекта).
-- Build command: оставить пустым.
-- Build output directory: `public`.
-- D1 binding: переменная `DB`, база `qwemu-web`.
-- Secret: `RATE_LIMIT_SECRET`.
+Запуск:
 
-Если Pages управляется через Git-интеграцию, после изменения D1 binding/секретов запусти новый deployment.
+```bash
+npm run dev
+```
 
-## Важные ограничения и безопасность
+Команда сначала собирает Pages Functions в Worker bundle, затем запускает `wrangler dev`. Открой локальный адрес, указанный Wrangler.
 
-- `wrangler.jsonc` содержит нулевой UUID как явный шаблон. До удалённого применения миграций и публикации обязательно замени его настоящим `database_id`.
-- `RATE_LIMIT_SECRET` обязателен для регистрации и входа. Health endpoint может отвечать `ok`, даже если база ещё не подключена; поле `databaseConfigured` показывает состояние D1 binding.
-- Пароли обрабатываются PBKDF2-HMAC-SHA-256 с 310 000 итераций. До production измерь CPU-время регистрации и входа на выбранном тарифе Cloudflare. Если запрос превышает лимит CPU, используй подходящий тариф/проверенный auth backend; не уменьшай число итераций без отдельного анализа безопасности.
-- Сессии используют HttpOnly/Secure/SameSite cookies; изменяющие запросы защищены CSRF и проверкой Origin.
-- Не включай широкие CORS-заголовки и не переноси секреты в `public/`.
-- R2 не требуется: аудио не отправляется на сервер.
-- Настоящий Cloudflare deploy, удалённая D1-миграция и live-регистрация не выполнялись при подготовке архива.
+## 2. Создание D1 и подготовка production
+
+Создай базу:
+
+```bash
+npm run db:create
+```
+
+Wrangler выведет настоящий `database_id`. Скопируй его в `wrangler.jsonc` вместо нулевого UUID:
+
+```json
+"database_id": "UUID_ИЗ_ВЫВОДА_WRANGLER"
+```
+
+Нулевой UUID в репозитории — только безопасный шаблон. Скрипт публикации намеренно остановится, пока он не заменён реальным ID.
+
+Примени миграции к production D1:
+
+```bash
+npm run db:migrate:remote
+```
+
+Создай production secret:
+
+```bash
+npx wrangler secret put RATE_LIMIT_SECRET
+```
+
+Введи длинное случайное значение. Оно не должно совпадать с локальным значением из `.dev.vars`. Не добавляй секрет в Git, `.env`, `wrangler.jsonc` или frontend-код.
+
+## 3. Проверка и публикация Workers
+
+Локальные проверки:
+
+```bash
+npm run check
+```
+
+Публикация:
+
+```bash
+npm run deploy
+```
+
+Перед публикацией выполняются сборка Worker, синтаксические проверки, smoke-тесты и проверка настоящего D1 ID. Затем запускается `wrangler deploy`.
+
+В Cloudflare Dashboard проверь Worker `qwemu`, binding `DB` (D1 `qwemu-web`) и secret `RATE_LIMIT_SECRET`. Для собственного домена подключи Custom Domain в настройках Worker.
+
+## Маршрутизация и заголовки
+
+- `/api/*` всегда направляется в Worker через `assets.run_worker_first`.
+- Остальные запросы обслуживаются Static Assets; неизвестные frontend-маршруты возвращают SPA shell.
+- `public/_headers` задаёт заголовки для статических ответов. API-ответы задают защитные заголовки непосредственно в Worker.
+- Worker bundle находится в `dist/worker/`, вне `public/`; он не попадает в публичные Static Assets.
+- Старый Pages-файл `_routes.json` не используется и удалён.
+
+## Безопасность и ограничения
+
+- Пароли обрабатываются PBKDF2-HMAC-SHA-256; число итераций сейчас 310 000. Перед production проверь CPU time регистрации и входа на выбранном тарифе Workers. Не уменьшай стойкость паролей для обхода CPU-лимита.
+- Сессии хранятся в D1 в виде хэшей токенов; cookie сессии имеет `HttpOnly`, `Secure`, `SameSite=Lax`.
+- Изменяющие запросы проверяют same-origin и CSRF-токен.
+- Rate limit использует секрет `RATE_LIMIT_SECRET` и D1.
+- Аудиофайлы остаются локальными. R2 для текущей модели не требуется.
+- Production deploy, удалённая D1-миграция и live-регистрация требуют твоего Cloudflare-аккаунта и здесь не выполнялись.
+
+## Desktop и ошибка cpal
+
+Windows-ошибка `cpal` / `Access is denied (os error 5)` относится к локальной сборке Desktop на Windows. Она не относится к Cloudflare Web Edition: в этом проекте нет Tauri, Rust, cpal или rodio. Не указывай Desktop-папку как корень Cloudflare-проекта.
