@@ -48,7 +48,7 @@ assert.equal(db.migrations_dir, 'migrations', 'Не настроен катал�
 assert.match(db.database_id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, 'database_id должен иметь формат UUID');
 
 const headers = await read('public/_headers');
-assert.ok(headers.includes('X-Content-Type-Options: nosniff'), 'Не настроен nosniff');
+assert.ok(headers.includes('Content-Security-Policy:'), 'Не настроена CSP для Static Assets');
 assert.ok(headers.includes('X-Content-Type-Options: nosniff'), 'Не настроен nosniff');
 
 const sql = await read('migrations/0001_initial.sql');
@@ -61,8 +61,8 @@ assert.ok(files.includes('main.js') && files.includes('app.css') && files.includ
 assert.equal(await exists('public/_routes.json'), false, 'Старый Pages _routes.json не должен оставаться в Workers-проекте');
 assert.equal(await exists('public/.assetsignore.'), false, 'Некорректный .assetsignore. не должен оставаться в проекте');
 const assetsIgnore = await read('public/.assetsignore');
-assert.ok(assetsIgnore.includes('_worker.js\\n'), 'Worker internals должны исключаться из Static Assets');
-assert.ok(assetsIgnore.includes('_worker.js\\n'), 'Worker internals должны исключаться из Static Assets');
+assert.ok(assetsIgnore.split(String.fromCharCode(10)).includes('_worker.js'), 'Worker internals должны исключаться из Static Assets');
+assert.ok(assetsIgnore.split(String.fromCharCode(10)).includes('_headers'), 'Служебный _headers не должен публиковаться как файл');
 assert.equal(await exists('dist/worker/index.js'), true, 'Не найден сгенерированный Worker bundle');
 assert.equal(await exists('scripts/check-deploy.mjs'), true, 'Отсутствует pre-deploy validation');
 console.log('QWEMU Cloudflare smoke tests: PASS');
