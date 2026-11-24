@@ -4,14 +4,14 @@
   "version": "1.4.0",
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
-    "build": "wrangler pages functions build --outdir=./public/_worker.js/",
+    "build": "wrangler pages functions build --outdir=./dist/worker/",
+    "dev": "npm run build && wrangler dev",
+    "deploy": "npm run check && node scripts/check-deploy.mjs && wrangler deploy",
     "db:create": "wrangler d1 create qwemu-web",
     "db:migrate:local": "wrangler d1 migrations apply qwemu-web --local",
     "db:migrate:remote": "wrangler d1 migrations apply qwemu-web --remote",
     "test": "node tests/smoke.mjs",
-    "check": "node --check functions/api/[[path]].js && node --check public/assets/main.js && node --check public/assets/api-adapter.js && node --check public/assets/auth-adapter.js && node --check public/assets/audio-adapter.js && node tests/smoke.mjs"
+    "check": "npm run build && node --check dist/worker/index.js && node --check \"functions/api/[[path]].js\" && node --check public/assets/main.js && node --check public/assets/api-adapter.js && node --check public/assets/auth-adapter.js && node --check public/assets/audio-adapter.js && node tests/smoke.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"
