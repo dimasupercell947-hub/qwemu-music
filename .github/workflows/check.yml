@@ -23,4 +23,7 @@ jobs:
         with:
           node-version: 22
       - run: npm install --no-audit --no-fund
-      - run: npm run check
+      - name: Static, unit and Wrangler build checks
+        run: npm run check
+      - name: Worker and D1 integration tests
+        run: npm run test:integration
