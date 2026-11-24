@@ -71,12 +71,12 @@ try {
     npmCli, 'exec', '--', 'wrangler', 'dev',
     '--local', '--ip', '127.0.0.1', '--port', String(port),
     '--persist-to', persistDir,
-    '--var', 'RATE_LIMIT_SECRET:integration-test-only-value'
+    '--var', 'RATE_LIMIT_SECRET:integration-test-only-value-32-bytes'
   ], { stdio: 'inherit' });
   await waitForServer(server);
 
   const health = await jsonRequest('/api/health');
-  check(health.response.status === 200 && health.payload.databaseReady === true, 'D1 health-check должен подтверждать реальный SELECT');
+  check(health.response.status === 200 && health.payload.databaseReady === true && health.payload.rateLimitConfigured === true, 'D1 health-check должен подтверждать реальный SELECT');
 
   const unknownApi = await jsonRequest('/api/__not_found__');
   check(unknownApi.response.status === 404 && typeof unknownApi.payload.error === 'string', 'Неизвестный API route должен возвращать JSON 404');
