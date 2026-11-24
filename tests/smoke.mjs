@@ -64,7 +64,7 @@ assert.equal(await exists('public/_routes.json'), false, 'Старый Pages _ro
 assert.equal(await exists('public/.assetsignore.'), false, 'Некорректный .assetsignore. не должен оставаться в проекте');
 const assetsIgnore = await read('public/.assetsignore');
 assert.ok(assetsIgnore.split(/\r?\n/g).includes('_worker.js'), 'Worker internals должны исключаться из Static Assets');
-assert.ok(assetsIgnore.split(String.fromCharCode(10)).includes('_headers'), 'Служебный _headers не должен публиковаться как файл');
+assert.ok(assetsIgnore.split(/\r?\n/g).includes('_headers'), 'Служебный _headers не должен публиковаться как файл');
 assert.equal(await exists('dist/worker/index.js'), true, 'Не найден сгенерированный Worker bundle');
 assert.equal(await exists('scripts/check-deploy.mjs'), true, 'Отсутствует pre-deploy validation');
 console.log('QWEMU Cloudflare smoke tests: PASS');
