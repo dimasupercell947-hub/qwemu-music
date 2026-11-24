@@ -41,9 +41,7 @@ npx wrangler login
 Copy-Item .dev.vars.example .dev.vars
 ```
 
-Открой `.dev.vars` и задай собственный случайный `RATE_LIMIT_SECRET`. Не используй примерное значение из репозитория.
-
-Открой `.dev.vars` и замени пример на длинное случайное значение `RATE_LIMIT_SECRET`. Файл `.dev.vars` игнорируется Git и не должен публиковаться.
+Открой `.dev.vars` и задай собственный случайный `RATE_LIMIT_SECRET`. Файл `.dev.vars` игнорируется Git и не должен публиковаться. Не используй примерное значение из репозитория.
 
 Создай локальную D1-базу и примени миграции:
 
@@ -123,7 +121,7 @@ npm run deploy
 
 - Root directory: `/` (корень репозитория).
 - Build command: `npm run build`.
-- Deploy command: `npx wrangler deploy`.
+- Deploy command: `npm run deploy` (выполняет полный набор проверок и проверяет настоящий D1 UUID перед публикацией).
 - В Cloudflare должен быть подключён именно Worker `qwemu-music`, а не Pages-проект с тем же репозиторием.
 
 Затем проверь binding `DB` (D1 `qwemu-web`) и secret `RATE_LIMIT_SECRET`. Для собственного домена подключи Custom Domain в настройках Worker.
