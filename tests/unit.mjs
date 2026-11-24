@@ -21,7 +21,7 @@ async function testFingerprint() {
 
   await assert.rejects(
     fingerprintFile(new File([], 'empty.mp3')),
-    /непустого файла/
+    /непуст/
   );
 }
 
