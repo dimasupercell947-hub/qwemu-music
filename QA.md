@@ -162,8 +162,7 @@ Workflow выполняет:
 4. Проверку авторизации Wrangler.
 5. Проверку workers.dev subdomain через Cloudflare API до изменения production D1.
 6. Remote D1 migrations.
-7. Публикацию Worker/Static Assets.
-8. Передачу RATE_LIMIT_SECRET через stdin (Wrangler создаёт новую версию Worker).
+7. Публикацию Worker/Static Assets вместе с RATE_LIMIT_SECRET через временный secrets-file в одной версии.
 9. Необязательную проверку production `/api/health`, которая подтверждает D1 и наличие rate-limit secret.
 
 Production deployment не считается проверенным до успешного запуска workflow в аккаунте пользователя. Удалённые миграции, доступность Worker и CPU budget не подтверждаются локальными тестами.
@@ -174,3 +173,5 @@ Production deployment не считается проверенным до усп
 - Новый production deploy требует RATE_LIMIT_SECRET минимум 32 байта и без начальных/конечных пробелов.
 - workers.dev subdomain проверяется read-only через Cloudflare API до remote D1 migrations; при отсутствии поддомена deploy останавливается до изменения production базы.
 - Unit tests покрывают старый короткий secret, новый сильный secret, секрет с пробелами, зарегистрированный/отсутствующий workers.dev subdomain, route-only worker и недостаточные API permissions.
+
+- Production deployment использует `wrangler deploy --secrets-file`: Worker не активируется раньше, чем в той же версии окажется RATE_LIMIT_SECRET.
