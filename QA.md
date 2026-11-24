@@ -163,7 +163,7 @@ Workflow выполняет:
 5. Проверку workers.dev subdomain через Cloudflare API до изменения production D1.
 6. Remote D1 migrations.
 7. Публикацию Worker/Static Assets вместе с RATE_LIMIT_SECRET через временный secrets-file в одной версии.
-9. Необязательную проверку production `/api/health`, которая подтверждает D1 и наличие rate-limit secret.
+8. Необязательную проверку production `/api/health`, которая подтверждает D1 и наличие rate-limit secret.
 
 Production deployment не считается проверенным до успешного запуска workflow в аккаунте пользователя. Удалённые миграции, доступность Worker и CPU budget не подтверждаются локальными тестами.
 
@@ -175,3 +175,5 @@ Production deployment не считается проверенным до усп
 - Unit tests покрывают старый короткий secret, новый сильный secret, секрет с пробелами, зарегистрированный/отсутствующий workers.dev subdomain, route-only worker и недостаточные API permissions.
 
 - Production deployment использует `wrangler deploy --secrets-file`: Worker не активируется раньше, чем в той же версии окажется RATE_LIMIT_SECRET.
+
+- README separates the GitHub Actions production deployment from the optional Cloudflare Workers Builds preview flow to avoid duplicate publishing.
