@@ -34,6 +34,7 @@ export class ApiAdapter {
       if (!response.ok) {
         const error = new Error(payload.error || `Сервер вернул HTTP ${response.status}.`);
         error.status = response.status;
+        error.payload = payload;
         throw error;
       }
       return payload;
