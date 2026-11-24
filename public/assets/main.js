@@ -24,7 +24,8 @@ const state = {
   page: 'home', tracks: [], favorites: Array.isArray(savedFavorites)?savedFavorites.filter(value=>typeof value==='string').slice(0,5000):[],
   playlists: Array.isArray(savedPlaylists)?savedPlaylists.filter(item=>item&&typeof item.id==='string'&&typeof item.name==='string'&&Array.isArray(item.trackIds)).slice(0,300):[],
   settings: normalizeSettings(savedSettings), settingsRevision: 0, repeat: false,
-  currentId: null, playRequestId: 0, search: '', user: null, authMode: 'login', cloudReady: false, cloudLoadId: 0, authTransition: false, activePlaylist: null, toastTimer: null
+  currentId: null, playRequestId: 0, search: '', user: null, authMode: 'login', cloudReady: false, cloudLoadId: 0, authTransition: false, activePlaylist: null, toastTimer: null,
+  cloudVersions: { playlists: null, favorites: null, settings: null }, cloudConflicts: {}, bootstrapData: null, pendingSequence: 0
 };
 const themes = { 'dark-red': ['#0c0b0d','#b51e32','#f07832'], 'orange-night': ['#100d0a','#b84b1e','#ff9b42'], midnight: ['#090d18','#394c9c','#9b85ff'], 'pure-black': ['#000000','#b51e32','#f07832'], light: ['#f3eef0','#a51f35','#e66a27'] };
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
@@ -39,6 +40,27 @@ function writeLocal(key, value) {
   try { storage.write(localKey(key), value); return true; }
   catch (error) { toast(error.message); return false; }
 }
+function readCloudPending() {
+  const value=storage.read(localKey('pendingCloud'),{});
+  return value&&typeof value==='object'&&!Array.isArray(value)?value:{};
+}
+function clearCloudPending(key) {
+  const pending=readCloudPending();
+  delete pending[key];
+  try {
+    if(Object.keys(pending).length)storage.write(localKey('pendingCloud'),pending);
+    else storage.remove(localKey('pendingCloud'));
+  } catch(error) { toast(`Не удалось очистить очередь синхронизации: ${error.message}`); }
+}
+function normalizeCloudValue(key,value) {
+  if(key==='playlists') {
+    return Array.isArray(value)?value.filter(item=>item&&typeof item.id==='string'&&typeof item.name==='string'&&Array.isArray(item.trackIds)).slice(0,300):[];
+  }
+  if(key==='favorites') {
+    return Array.isArray(value)?[...new Set(value.filter(item=>typeof item==='string'))].slice(0,5000):[];
+  }
+  return normalizeSettings(value);
+}
 function loadScopedLocal() {
   const favorites=storage.read(localKey('favorites'),[]);
   const playlists=storage.read(localKey('playlists'),[]);
@@ -46,6 +68,9 @@ function loadScopedLocal() {
   state.favorites=Array.isArray(favorites)?favorites.filter(value=>typeof value==='string').slice(0,5000):[];
   state.playlists=Array.isArray(playlists)?playlists.filter(item=>item&&typeof item.id==='string'&&typeof item.name==='string'&&Array.isArray(item.trackIds)).slice(0,300):[];
   state.settings=normalizeSettings(settings);
+  state.cloudVersions={playlists:null,favorites:null,settings:null};
+  state.cloudConflicts={};
+  state.cloudReady=false;
 }
 function saveLocal() {
   writeLocal('favorites', state.favorites);
@@ -96,7 +121,11 @@ function pageContent() {
   if (state.page === 'library') return `<div class="page-head"><div><div class="eyebrow">YOUR COLLECTION</div><h1 class="page-title">Медиатека</h1><p class="muted">Файлы не отправляются на сервер. После закрытия вкладки их нужно выбрать заново.</p></div><label class="primary-button file-label">＋ Добавить файлы<input id="file-input-library" type="file" accept="audio/*,.mp3,.wav,.flac,.ogg,.m4a,.aac" multiple></label></div>${renderTracks(visibleTracks())}`;
   if (state.page === 'favorites') return `<div class="page-head"><div><div class="eyebrow">YOUR FAVORITES</div><h1 class="page-title">Избранное</h1><p class="muted">Список избранного хранится локально.</p></div></div>${renderTracks(visibleTracks())}`;
   if (state.page === 'playlists') return `<div class="page-head"><div><div class="eyebrow">PERSONAL COLLECTIONS</div><h1 class="page-title">Плейлисты</h1><p class="muted">Создавай подборки из треков, добавленных в текущей сессии.</p></div><button class="primary-button" data-action="create-playlist">＋ Новый плейлист</button></div>${state.activePlaylist ? `<button class="text-button" data-action="back-playlists">← Все плейлисты</button><div class="section-head"><h2>${escapeHtml(state.playlists.find(p=>p.id===state.activePlaylist)?.name||'Плейлист')}</h2></div>${renderTracks(visibleTracks())}` : `<div class="playlist-grid">${state.playlists.map(p=>`<article class="playlist-card"><div class="eyebrow">QWEMU PLAYLIST</div><h3>${escapeHtml(p.name)}</h3><p>${p.trackIds.length} треков · ${escapeHtml(p.description||'Без описания')}</p><button class="secondary-button" data-action="open-playlist" data-id="${escapeHtml(p.id)}">Открыть</button> <button class="small-button" data-action="rename-playlist" data-id="${escapeHtml(p.id)}" aria-label="Переименовать">✎</button> <button class="small-button" data-action="delete-playlist" data-id="${escapeHtml(p.id)}" aria-label="Удалить">×</button></article>`).join('')}</div>${state.playlists.length?'':'<div class="empty-state"><b>Плейлистов ещё нет</b>Создай первую подборку — кнопка находится справа вверху.</div>'}`}`;
-  if (state.page === 'settings') return `<div class="page-head"><div><div class="eyebrow">PREFERENCES</div><h1 class="page-title">Настройки</h1><p class="muted">Настройки веб-версии отдельно от Desktop Edition.</p></div></div><section class="surface"><h2>Внешний вид</h2><div class="form-grid"><label>Тема<select id="theme-select">${Object.keys(themes).map(theme=>`<option value="${theme}" ${state.settings.theme===theme?'selected':''}>${theme}</option>`).join('')}</select></label><label>Громкость по умолчанию<input id="volume-setting" type="range" min="0" max="1" step="0.01" value="${state.settings.volume}"></label><label class="motion-setting"><input id="reduced-motion-setting" type="checkbox" ${state.settings.reducedMotion?'checked':''}> Уменьшить анимации</label></div></section><section class="surface" style="margin-top:14px"><h2>Данные и приватность</h2><p class="muted">Аудиофайлы обрабатываются браузером и не передаются в Cloudflare. При входе синхронизируются только структурированные метаданные аккаунта.</p><button class="secondary-button" data-action="sync">Синхронизировать метаданные</button></section>`;
+  if (state.page === 'settings') {
+    const conflictNames={playlists:'Плейлисты',favorites:'Избранное',settings:'Настройки'};
+    const conflicts=Object.entries(state.cloudConflicts).map(([key])=>`<article class="surface" style="margin-top:10px"><h3>${conflictNames[key]||key}</h3><p class="muted">Эти данные были изменены на другом устройстве. Выбери, какую версию оставить.</p><button class="secondary-button" data-action="resolve-cloud-remote" data-key="${key}">Использовать облачную</button> <button class="primary-button" data-action="resolve-cloud-local" data-key="${key}">Оставить эту версию</button></article>`).join('');
+    return `<div class="page-head"><div><div class="eyebrow">PREFERENCES</div><h1 class="page-title">Настройки</h1><p class="muted">Настройки веб-версии отдельно от Desktop Edition.</p></div></div><section class="surface"><h2>Внешний вид</h2><div class="form-grid"><label>Тема<select id="theme-select">${Object.keys(themes).map(theme=>`<option value="${theme}" ${state.settings.theme===theme?'selected':''}>${theme}</option>`).join('')}</select></label><label>Громкость по умолчанию<input id="volume-setting" type="range" min="0" max="1" step="0.01" value="${state.settings.volume}"></label><label class="motion-setting"><input id="reduced-motion-setting" type="checkbox" ${state.settings.reducedMotion?'checked':''}> Уменьшить анимации</label></div></section><section class="surface" style="margin-top:14px"><h2>Данные и приватность</h2><p class="muted">Аудиофайлы обрабатываются браузером и не передаются в Cloudflare. При входе синхронизируются только структурированные метаданные аккаунта.</p><button class="secondary-button" data-action="sync">Синхронизировать метаданные</button></section>${conflicts?'<section class="surface" style="margin-top:14px"><h2>Конфликты синхронизации</h2><p class="muted">Локальные изменения сохранены и не перезаписаны автоматически.</p>'+conflicts+'</section>':''}`;
+  }
   if (state.page === 'profile') return `<div class="page-head"><div><div class="eyebrow">ACCOUNT</div><h1 class="page-title">Профиль</h1></div></div>${state.user ? `<section class="surface"><h2>${escapeHtml(state.user.displayName)}</h2><p class="muted">@${escapeHtml(state.user.username)} · ${escapeHtml(state.user.email||'Почта не указана')}</p><form id="profile-edit-form" class="form-grid"><label>Отображаемое имя<input name="displayName" required minlength="2" maxlength="32" value="${escapeHtml(state.user.displayName)}"></label><label>Email<input name="email" type="email" maxlength="160" value="${escapeHtml(state.user.email||'')}"></label><button class="primary-button" type="submit">Сохранить профиль</button></form><button class="secondary-button" data-action="logout">Выйти</button></section>` : `<div class="empty-state"><b>Ты используешь локальный режим</b>Войди в аккаунт, чтобы сохранять плейлисты и настройки в веб-версии.<br><br><button class="primary-button" data-action="open-auth">Войти или зарегистрироваться</button></div>`}`;
   return '';
 }
@@ -118,44 +147,120 @@ function setPage(page) {
   state.page = page; render();
 }
 function persistCloud(key, value) {
-  const userId = state.user?.id;
-  if (!userId || state.authTransition) return Promise.resolve(false);
+  const userId=state.user?.id;
+  if(!userId||state.authTransition)return Promise.resolve(false);
   let snapshot;
-  try { snapshot = JSON.parse(JSON.stringify(value)); }
-  catch (error) { toast(`Не удалось подготовить облачные данные: ${error.message}`); return Promise.resolve(false); }
-  return cloudWrites.enqueue(`${userId}:${key}`, async () => {
-    // A queued request must never be sent under a different account's cookie.
-    if (state.user?.id !== userId) return false;
-    await api.request(`/api/${key}`, { method: 'PUT', headers: auth.csrfHeaders(), body: { value: snapshot } });
+  try { snapshot=JSON.parse(JSON.stringify(value)); }
+  catch(error) { toast(`Не удалось подготовить облачные данные: ${error.message}`); return Promise.resolve(false); }
+
+  const pending=readCloudPending();
+  const queuedAt=Date.now()*1000+(++state.pendingSequence%1000);
+  pending[key]={value:snapshot,baseUpdatedAt:state.cloudVersions[key]??null,queuedAt};
+  try { storage.write(localKey('pendingCloud'),pending); }
+  catch(error) { toast(`Не удалось сохранить очередь синхронизации: ${error.message}`); return Promise.resolve(false); }
+
+  let attempted=null;
+  return cloudWrites.enqueue(`${userId}:${key}`,async()=>{
+    if(state.user?.id!==userId||state.authTransition)return false;
+    const latest=readCloudPending()[key];
+    if(!latest)return true;
+    attempted=latest;
+    const expectedUpdatedAt=state.cloudVersions[key]??latest.baseUpdatedAt??null;
+    const result=await api.request(`/api/${key}`,{
+      method:'PUT',
+      headers:auth.csrfHeaders(),
+      body:{value:latest.value,expectedUpdatedAt}
+    });
+    state.cloudVersions[key]=result.updatedAt;
+    if(readCloudPending()[key]?.queuedAt===latest.queuedAt)clearCloudPending(key);
+    delete state.cloudConflicts[key];
+    state.cloudReady=true;
     return true;
-  }).catch(error => {
-    toast(`Локально сохранено, облачная синхронизация не выполнена: ${error.message}`);
+  }).catch(error=>{
+    if(error.status===409) {
+      const current=error.payload?.current||{};
+      state.cloudConflicts[key]={
+        localValue:attempted?.value??snapshot,
+        remoteValue:current.value??(key==='settings'?{}:[]),
+        remoteUpdatedAt:current.updatedAt??null
+      };
+      if(state.page==='settings')render();
+      toast('Облачные данные изменились на другом устройстве. Выбери версию в настройках.');
+    } else {
+      toast(`Изменения сохранены локально и ожидают синхронизации: ${error.message}`);
+    }
     return false;
   });
 }
+function resolveCloudConflict(key,choice) {
+  const conflict=state.cloudConflicts[key];
+  if(!conflict)return;
+  state.cloudVersions[key]=conflict.remoteUpdatedAt;
+  if(choice==='remote') {
+    state[key]=normalizeCloudValue(key,conflict.remoteValue);
+    clearCloudPending(key);
+    writeLocal(key,state[key]);
+    delete state.cloudConflicts[key];
+    applyTheme();
+    render();
+    toast('Использована облачная версия.');
+    return;
+  }
+  const localValue=normalizeCloudValue(key,conflict.localValue);
+  state[key]=localValue;
+  delete state.cloudConflicts[key];
+  writeLocal(key,state[key]);
+  render();
+  persistCloud(key,localValue).then(ok=>toast(ok?'Локальная версия отправлена в облако.':'Локальная версия сохранена; синхронизация ожидает повторной попытки.'));
+}
 async function loadCloud() {
-  const userId = state.user?.id;
-  if (!userId || state.authTransition) return;
-  const requestId = ++state.cloudLoadId;
-  const settingsRevisionAtRequest = state.settingsRevision;
+  const userId=state.user?.id;
+  if(!userId||state.authTransition)return;
+  const requestId=++state.cloudLoadId;
   try {
-    const [playlists, favorites, settings] = await Promise.all(['playlists','favorites','settings'].map(key=>api.request(`/api/${key}`)));
-    // Ignore a delayed response after a newer refresh or account transition.
-    if (requestId !== state.cloudLoadId || state.user?.id !== userId || state.authTransition) return;
-    if (Array.isArray(playlists.value)) state.playlists = mergePlaylists(state.playlists, playlists.value);
-    if (Array.isArray(favorites.value)) state.favorites = [...new Set([...state.favorites,...favorites.value])].slice(0,5000);
-    if (settings.value && typeof settings.value === 'object' && state.settingsRevision === settingsRevisionAtRequest) state.settings = normalizeSettings({ ...state.settings, ...settings.value });
-    saveLocal(); state.cloudReady = true; applyTheme(); render();
-  } catch (error) {
-    if (requestId === state.cloudLoadId && state.user?.id === userId && !state.authTransition) {
+    const [playlists,favorites,settings]=await Promise.all(['playlists','favorites','settings'].map(key=>api.request(`/api/${key}`)));
+    if(requestId!==state.cloudLoadId||state.user?.id!==userId||state.authTransition)return;
+    const remote={playlists,favorites,settings};
+    const pending=readCloudPending();
+    const retry=[];
+    const initialUpload=[];
+    for(const key of ['playlists','favorites','settings']) {
+      const row=remote[key];
+      const remoteVersion=row.updatedAt??null;
+      const remoteValue=normalizeCloudValue(key,row.value);
+      state.cloudVersions[key]=remoteVersion;
+      const localPending=pending[key];
+      if(localPending) {
+        state[key]=normalizeCloudValue(key,localPending.value);
+        if((localPending.baseUpdatedAt??null)===remoteVersion) {
+          delete state.cloudConflicts[key];
+          retry.push(key);
+        } else {
+          state.cloudConflicts[key]={localValue:state[key],remoteValue,remoteUpdatedAt:remoteVersion};
+        }
+      } else if(remoteVersion!==null) {
+        // The server is authoritative: removed items must not reappear from stale local snapshots.
+        state[key]=remoteValue;
+        delete state.cloudConflicts[key];
+      } else {
+        // First sync for a new account: preserve the user's local-only metadata.
+        const initial=state.bootstrapData?.[key]??state[key];
+        state[key]=normalizeCloudValue(key,initial);
+        initialUpload.push(key);
+      }
+    }
+    state.bootstrapData=null;
+    saveLocal();
+    state.cloudReady=true;
+    applyTheme();
+    render();
+    for(const key of [...retry,...initialUpload])persistCloud(key,state[key]);
+    if(Object.keys(state.cloudConflicts).length)toast('Обнаружен конфликт синхронизации. Проверь раздел «Настройки».');
+  } catch(error) {
+    if(requestId===state.cloudLoadId&&state.user?.id===userId&&!state.authTransition) {
       toast(`Аккаунт доступен, но метаданные не загружены: ${error.message}`);
     }
   }
-}
-function mergePlaylists(local, remote) {
-  const map = new Map();
-  for (const item of [...remote, ...local]) if (item && typeof item.id === 'string') map.set(item.id, item);
-  return [...map.values()].slice(0,300);
 }
 async function addFiles(fileList) {
   const selected = [...(fileList || [])].filter(file => file instanceof File && (file.type.startsWith('audio/') || /\.(mp3|wav|flac|ogg|oga|m4a|aac|aiff)$/i.test(file.name)));
@@ -248,10 +353,15 @@ async function submitAuth(event) {
   event.preventDefault(); const errorNode = $('#auth-error'); errorNode.textContent = '';
   const username = $('#auth-username').value.trim(); const password = $('#auth-password').value;
   try {
+    const localBootstrap={favorites:[...state.favorites],playlists:JSON.parse(JSON.stringify(state.playlists)),settings:{...state.settings}};
     if (state.authMode === 'register') {
       const displayName = $('#auth-display').value.trim(); const email = $('#auth-email').value.trim();
       state.user = await auth.register({ username, displayName, email, password });
-    } else state.user = await auth.login(username, password);
+      state.bootstrapData=localBootstrap;
+    } else {
+      state.user = await auth.login(username, password);
+      state.bootstrapData=null;
+    }
     state.cloudLoadId += 1;
     loadScopedLocal(); applyTheme();
     $('#auth-dialog').close(); $('#auth-form').reset(); render(); await loadCloud(); toast(`Добро пожаловать, ${state.user.displayName}.`);
@@ -272,7 +382,7 @@ function openAuth() { setAuthMode('login'); $('#auth-dialog').showModal(); }
 document.addEventListener('click', async event => {
   const page = event.target.closest('[data-page]'); if (page) { setPage(page.dataset.page); return; }
   const action = event.target.closest('[data-action]'); if (!action) return;
-  const { action: name, id } = action.dataset;
+  const { action: name, id, key } = action.dataset;
   if (name === 'play-track') await playTrack(id);
   else if (name === 'favorite') toggleFavorite(id);
   else if (name === 'create-playlist') createPlaylist();
@@ -296,7 +406,9 @@ document.addEventListener('click', async event => {
     } catch (error) { toast(error.message); }
     finally { state.authTransition = false; }
   }
-  else if (name === 'sync') { await loadCloud(); toast(state.cloudReady ? 'Метаданные обновлены.' : 'Синхронизация пока недоступна.'); }
+  else if (name === 'sync') { await loadCloud(); toast(state.cloudReady ? 'Проверка синхронизации завершена.' : 'Синхронизация пока недоступна.'); }
+  else if (name === 'resolve-cloud-local') resolveCloudConflict(key,'local');
+  else if (name === 'resolve-cloud-remote') resolveCloudConflict(key,'remote');
   else if (name === 'stop') stopPlayback();
   else if (name === 'repeat') { state.repeat=!state.repeat; audio.setRepeat(state.repeat); render(); }
 });
