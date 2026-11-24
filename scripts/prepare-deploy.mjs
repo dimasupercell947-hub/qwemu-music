@@ -18,12 +18,15 @@ export function buildDeployConfig(baseConfig, env) {
   if (!UUID.test(databaseId) || databaseId === '00000000-0000-0000-0000-000000000000') {
     throw new Error('CLOUDFLARE_D1_DATABASE_ID отсутствует или не является настоящим UUID D1.');
   }
-  if (new TextEncoder().encode(rateLimitSecret).byteLength < 32) {
+  if (new TextEncoder().encode(rateLimitSecret).byteLength < 32 || /^\\s+$/.test(rateLimitSecret)) {
     throw new Error('RATE_LIMIT_SECRET должен содержать не менее 32 байт.');
   }
 
   const config = JSON.parse(JSON.stringify(baseConfig));
   const database = config.d1_databases?.find(item => item.binding === 'DB');
+  if (config.name !== 'qwemu-music') {
+    throw new Error('Wrangler Worker name должен быть qwemu-music.');
+  }
   if (!database || database.database_name !== 'qwemu-web') {
     throw new Error('В Wrangler config не найден ожидаемый D1 binding DB / qwemu-web.');
   }
