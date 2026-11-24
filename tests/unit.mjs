@@ -2,6 +2,39 @@ import assert from 'node:assert/strict';
 import { File } from 'node:buffer';
 import { fingerprintFile } from '../public/assets/file-fingerprint.js';
 import { CloudWriteQueue } from '../public/assets/cloud-write-queue.js';
+import { buildDeployConfig } from '../scripts/prepare-deploy.mjs';
+
+
+function testDeployConfig() {
+  const zeroId = '00000000-0000-0000-0000-000000000000';
+  const source = {
+    name: 'qwemu-music',
+    main: './dist/worker/index.js',
+    assets: { directory: './public', run_worker_first: ['/api/*'] },
+    d1_databases: [{
+      binding: 'DB',
+      database_name: 'qwemu-web',
+      database_id: zeroId,
+      preview_database_id: zeroId,
+      migrations_dir: 'migrations'
+    }]
+  };
+  const secret = 'qwemu-production-secret-'.repeat(2);
+  const env = {
+    CLOUDFLARE_ACCOUNT_ID: 'a'.repeat(32),
+    CLOUDFLARE_D1_DATABASE_ID: '12345678-1234-4abc-8def-123456789abc',
+    RATE_LIMIT_SECRET: secret
+  };
+  const deployed = buildDeployConfig(source, env);
+  assert.equal(deployed.account_id, env.CLOUDFLARE_ACCOUNT_ID);
+  assert.equal(deployed.d1_databases[0].database_id, env.CLOUDFLARE_D1_DATABASE_ID);
+  assert.equal(deployed.d1_databases[0].preview_database_id, zeroId);
+  assert.equal(source.d1_databases[0].database_id, zeroId, 'Исходный config не должен мутировать');
+  assert.doesNotMatch(JSON.stringify(deployed), new RegExp(secret), 'Секрет не должен попадать в Wrangler config');
+  assert.throws(() => buildDeployConfig(source, { ...env, CLOUDFLARE_D1_DATABASE_ID: zeroId }), /настоящим UUID/);
+  assert.throws(() => buildDeployConfig(source, { ...env, CLOUDFLARE_ACCOUNT_ID: 'bad' }), /ACCOUNT_ID/);
+  assert.throws(() => buildDeployConfig(source, { ...env, RATE_LIMIT_SECRET: 'short' }), /32 байт/);
+}
 
 async function testFingerprint() {
   const bytes = new Uint8Array(220_000);
@@ -49,7 +82,8 @@ async function testCloudWriteQueue() {
   assert.equal(queue.pending.size,0,'После drain очередь должна быть пустой');
 }
 
+testDeployConfig();
 await testFingerprint();
 await testCloudWriteQueue();
 console.log('QWEMU unit tests: PASS');
-console.log('Проверено: fingerprint cross-device stability, content change detection, invalid file validation, serialized cloud writes and queue recovery.');
+console.log('Проверено: production Wrangler config validation, secret isolation, fingerprint stability, invalid file validation, serialized cloud writes and queue recovery.');
