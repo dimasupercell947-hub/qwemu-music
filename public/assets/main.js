@@ -216,6 +216,8 @@ function resolveCloudConflict(key,choice) {
 async function loadCloud() {
   const userId=state.user?.id;
   if(!userId||state.authTransition)return;
+  await cloudWrites.drain();
+  if(state.user?.id!==userId||state.authTransition)return;
   const requestId=++state.cloudLoadId;
   try {
     const [playlists,favorites,settings]=await Promise.all(['playlists','favorites','settings'].map(key=>api.request(`/api/${key}`)));
