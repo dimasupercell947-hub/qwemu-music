@@ -4,8 +4,50 @@ import { fingerprintFile } from '../public/assets/file-fingerprint.js';
 import { CloudWriteQueue } from '../public/assets/cloud-write-queue.js';
 import { buildDeployConfig } from '../scripts/prepare-deploy.mjs';
 import { onRequest } from '../functions/api/[[path]].js';
+import { checkWorkersSubdomain } from '../scripts/check-cloudflare.mjs';
 
 
+
+async function testWorkersSubdomainPreflight() {
+  const base = {
+    accountId: 'a'.repeat(32),
+    apiToken: 'test-token',
+    config: { name: 'qwemu-music' }
+  };
+
+  const valid = await checkWorkersSubdomain({
+    ...base,
+    fetchImpl: async (url, options) => {
+      assert.ok(url.endsWith('/workers/subdomain'));
+      assert.equal(options.headers.Authorization, 'Bearer test-token');
+      return new Response(JSON.stringify({ success: true, result: { subdomain: 'qwemu-test' } }), { status: 200 });
+    }
+  });
+  assert.deepEqual(valid, { required: true, subdomain: 'qwemu-test' });
+
+  await assert.rejects(
+    checkWorkersSubdomain({
+      ...base,
+      fetchImpl: async () => new Response(JSON.stringify({ success: true, result: {} }), { status: 200 })
+    }),
+    /workers.dev subdomain/
+  );
+
+  const routeOnly = await checkWorkersSubdomain({
+    accountId: 'a'.repeat(32),
+    config: { workers_dev: false, routes: ['music.example.com/*'] },
+    fetchImpl: async () => { throw new Error('route-only worker must not query workers.dev'); }
+  });
+  assert.deepEqual(routeOnly, { required: false, subdomain: null });
+
+  await assert.rejects(
+    checkWorkersSubdomain({
+      ...base,
+      fetchImpl: async () => new Response(JSON.stringify({ success: false, errors: [{ message: 'permission denied' }] }), { status: 403 })
+    }),
+    /Workers Scripts Read или Write/
+  );
+}
 
 async function testWorkerReadiness() {
   const request = new Request('https://qwemu.test/api/health');
@@ -29,6 +71,19 @@ async function testWorkerReadiness() {
   const payload = await ready.json();
   assert.equal(payload.databaseReady, true);
   assert.equal(payload.rateLimitConfigured, true);
+  assert.equal(payload.rateLimitStrong, true);
+
+  const legacyReady = await onRequest({
+    request,
+    env: {
+      DB: { prepare: () => ({ first: async () => ({ ready: 1 }) }) },
+      RATE_LIMIT_SECRET: 'legacy-short-secret'
+    }
+  });
+  assert.equal(legacyReady.status, 200, 'Старый непустой секрет не должен отключать авторизацию после обновления');
+  const legacyPayload = await legacyReady.json();
+  assert.equal(legacyPayload.rateLimitConfigured, true);
+  assert.equal(legacyPayload.rateLimitStrong, false, 'Короткий старый секрет должен отмечаться как требующий усиления, но не блокировать сервис');
 }
 
 function testDeployConfig() {
@@ -60,6 +115,7 @@ function testDeployConfig() {
   assert.throws(() => buildDeployConfig(source, { ...env, CLOUDFLARE_D1_DATABASE_ID: zeroId }), /настоящим UUID/);
   assert.throws(() => buildDeployConfig(source, { ...env, CLOUDFLARE_ACCOUNT_ID: 'bad' }), /ACCOUNT_ID/);
   assert.throws(() => buildDeployConfig(source, { ...env, RATE_LIMIT_SECRET: 'short' }), /32 байт/);
+  assert.throws(() => buildDeployConfig(source, { ...env, RATE_LIMIT_SECRET: secret + '   ' }), /32 байт и без пробелов/);
 }
 
 async function testFingerprint() {
@@ -109,8 +165,9 @@ async function testCloudWriteQueue() {
 }
 
 testDeployConfig();
+await testWorkersSubdomainPreflight();
 await testWorkerReadiness();
 await testFingerprint();
 await testCloudWriteQueue();
 console.log('QWEMU unit tests: PASS');
-console.log('Проверено: production Wrangler config validation, Worker readiness behavior, secret isolation, fingerprint stability, invalid file validation, serialized cloud writes and queue recovery.');
+console.log('Проверено: production Wrangler config validation, Worker readiness backward compatibility, workers.dev preflight, secret isolation, fingerprint stability, invalid file validation, serialized cloud writes and queue recovery.');
