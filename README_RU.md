@@ -152,7 +152,7 @@ Windows-ошибка `cpal` / `Access is denied (os error 5)` относится
 
 ## 4. Production-публикация через GitHub Actions
 
-В репозитории есть ручной workflow `.github/workflows/deploy.yml`. Он проводит проверки, применяет remote D1 migrations, публикует Worker и устанавливает `RATE_LIMIT_SECRET`. Production-публикация не запускается автоматически при каждом push.
+В репозитории есть ручной workflow `.github/workflows/deploy.yml`. Он проводит проверки, применяет remote D1 migrations, публикует Worker, затем устанавливает `RATE_LIMIT_SECRET` через stdin. Wrangler создаёт новую версию Worker после обновления секрета. Production-публикация не запускается автоматически при каждом push.
 
 ### Подготовка Cloudflare
 
@@ -181,6 +181,6 @@ Windows-ошибка `cpal` / `Access is denied (os error 5)` относится
 3. Для `confirm_production` выбери **yes**.
 4. В необязательное поле `health_url` можно вставить полный адрес endpoint, например `https://<твой-worker-домен>/api/health`. Тогда workflow дополнительно проверит HTTP 200 и `databaseReady=true`.
 
-Workflow последовательно запускает `npm run check`, `npm run test:integration`, проверяет Cloudflare credentials, применяет миграции, публикует Worker и задаёт секрет через stdin. Если health URL не задан, успешная публикация не означает, что внешний HTTP health-check был выполнен: проверь `/api/health` вручную.
+Workflow последовательно запускает `npm run check`, `npm run test:integration`, проверяет Cloudflare credentials, применяет миграции, публикует Worker и задаёт секрет через stdin. Health endpoint проверяет и доступность D1, и наличие `RATE_LIMIT_SECRET` не короче 32 байт. Если health URL не задан, успешная публикация не означает, что внешний HTTP health-check был выполнен: проверь `/api/health` вручную.
 
 Обычный `npm run deploy` по-прежнему предназначен для локального Wrangler-профиля с настоящим `database_id` в `wrangler.jsonc`. Для GitHub Actions используется временная production-конфигурация, поэтому production UUID не нужно коммитить в репозиторий.
