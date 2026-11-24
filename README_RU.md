@@ -2,6 +2,10 @@
 
 Отдельная браузерная версия QWEMU MUSIC на Cloudflare Workers + Static Assets + D1. Desktop-приложение Tauri/Rust не входит в этот проект.
 
+## QA
+
+Статус проверок и тест-кейсы находятся в [QA.md](./QA.md).
+
 ## Архитектура
 
 - `public/` — статический сайт, CSS, JS и правила заголовков Workers.
