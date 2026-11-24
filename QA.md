@@ -28,7 +28,7 @@
 
 ## 2. Тестовый набор
 
-Полная команда:
+Быстрые проверки, пригодные для Cloudflare Workers Builds:
 
     npm install
     npm run check
@@ -38,17 +38,26 @@
 1. Сборка Pages Functions в Worker bundle.
 2. Проверка синтаксиса Worker, API, frontend, скриптов и тестов.
 3. Smoke-тесты структуры сайта, импортов, Workers config, Static Assets, D1 schema и security markers.
-4. Unit-тесты fingerprint: одинаковое содержимое с разными именами/датами, изменение проверяемого sample, пустой файл.
-5. Unit-тесты CloudWriteQueue: последовательность операций и восстановление после rejected operation.
-6. wrangler deploy --dry-run без публикации.
-7. Применение миграций к изолированной временной локальной D1.
-8. HTTP integration tests локального Worker: health, API 404, Origin, регистрация, cookies, сессии, CSRF, конфликты версии, удаление и logout.
-9. Удаление временной тестовой базы.
+4. Unit-тесты fingerprint и CloudWriteQueue.
+5. wrangler deploy --dry-run без публикации.
 
-Отдельные команды:
+Команда не запускает локальный HTTP-сервер и интеграционную D1-среду. Это исключает зависимость обычной проверки сборки от доступности локального runtime/портов в CI или Cloudflare build container.
+
+Полная интеграционная проверка запускается отдельно:
+
+    npm run test:integration
+
+Она применяет миграции к изолированной временной D1, поднимает локальный Worker, проверяет health, API 404, Origin, регистрацию, cookies, сессии, CSRF, конфликты версий, удаление и logout, затем удаляет временную базу.
+
+Полный локальный набор:
+
+    npm run test:ci
+
+GitHub Actions выполняет `npm run check` и `npm run test:integration` отдельными шагами на Linux и Windows.
+
+Дополнительные команды:
 
     npm test
-    npm run test:integration
     npm run dev
 
 ## 3. API integration matrix
