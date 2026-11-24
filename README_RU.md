@@ -158,7 +158,7 @@ Windows-ошибка `cpal` / `Access is denied (os error 5)` относится
 
 1. В своём Cloudflare аккаунте создай D1 с именем `qwemu-web` (например, командой `npm run db:create` после `npx wrangler login`). Сохрани выданный UUID.
 2. Получи Account ID из панели Cloudflare.
-3. Создай API Token с правами D1 Edit и Workers Scripts Edit, а также Account Settings Read для проверки аккаунта. При самой первой публикации, если Worker ещё не существует, токену может потребоваться Workers Admin на уровне продукта; после создания Worker доступ можно сузить до Editor для этого Worker.
+3. Создай API Token с правами D1 Edit, Workers Scripts Write и Account Settings Read. Workers Scripts Write нужен для read-only проверки workers.dev subdomain и публикации Worker. При самой первой публикации, если Worker ещё не существует, токену может потребоваться Workers Admin на уровне продукта; после создания Worker доступ можно сузить до Editor для этого Worker.
 4. Не передавай API Token или значения секретов в чат и не добавляй их в файлы репозитория.
 
 ### GitHub Actions secrets
@@ -174,6 +174,10 @@ Windows-ошибка `cpal` / `Access is denied (os error 5)` относится
 
 Секрет `RATE_LIMIT_SECRET` нужен именно Worker для rate limit. Скрипт создаёт временный `wrangler.deploy.jsonc` с ID аккаунта и D1, но не записывает значение секрета в этот файл. Временная конфигурация игнорируется Git и удаляется в конце workflow.
 
+### Настройка workers.dev
+
+Перед первой публикацией открой Cloudflare Dashboard → **Workers & Pages** → **Overview** → **Your subdomain** и зарегистрируй уникальный поддомен `workers.dev`. Текущий Worker не привязан к собственному домену, поэтому используется адрес `qwemu-music.<поддомен>.workers.dev`. GitHub Actions проверяет наличие поддомена через Cloudflare API до remote D1 migrations и останавливается с понятной ошибкой, если он не настроен.
+
 ### Запуск
 
 1. Открой вкладку **Actions** репозитория.
@@ -181,6 +185,6 @@ Windows-ошибка `cpal` / `Access is denied (os error 5)` относится
 3. Для `confirm_production` выбери **yes**.
 4. В необязательное поле `health_url` можно вставить полный адрес endpoint, например `https://<твой-worker-домен>/api/health`. Тогда workflow дополнительно проверит HTTP 200 и `databaseReady=true`.
 
-Workflow последовательно запускает `npm run check`, `npm run test:integration`, проверяет Cloudflare credentials, применяет миграции, публикует Worker и задаёт секрет через stdin. Health endpoint проверяет и доступность D1, и наличие `RATE_LIMIT_SECRET` не короче 32 байт. Если health URL не задан, успешная публикация не означает, что внешний HTTP health-check был выполнен: проверь `/api/health` вручную.
+Workflow последовательно запускает `npm run check`, `npm run test:integration`, проверяет Cloudflare credentials и workers.dev subdomain, затем применяет миграции, публикует Worker и задаёт секрет через stdin. Проверка workers.dev выполняется до изменения production D1. Health endpoint проверяет доступность D1 и наличие непустого `RATE_LIMIT_SECRET`; поле `rateLimitStrong` отдельно сообщает, соответствует ли секрет рекомендации в 32 байта. Старые непустые секреты продолжают работать после обновления, а новый GitHub Actions deploy требует длинный секрет без пробелов по краям. Если health URL не задан, успешная публикация не означает, что внешний HTTP health-check был выполнен: проверь `/api/health` вручную.
 
 Обычный `npm run deploy` по-прежнему предназначен для локального Wrangler-профиля с настоящим `database_id` в `wrangler.jsonc`. Для GitHub Actions используется временная production-конфигурация, поэтому production UUID не нужно коммитить в репозиторий.
