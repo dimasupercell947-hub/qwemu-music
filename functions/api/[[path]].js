@@ -222,14 +222,16 @@ async function handle(request,env) {
     }
     const now=Date.now();
     const result=await env.DB.prepare(`INSERT INTO user_data(user_id,data_key,data_json,updated_at) VALUES(?,?,?,?)
-      ON CONFLICT(user_id,data_key) DO UPDATE SET data_json=excluded.data_json,updated_at=excluded.updated_at
+      ON CONFLICT(user_id,data_key) DO UPDATE SET data_json=excluded.data_json,
+        updated_at=MAX(excluded.updated_at,user_data.updated_at+1)
       WHERE user_data.updated_at=?`).bind(session.user_id,dataKey,JSON.stringify(value),now,expectedUpdatedAt).run();
     const changed=Number(result?.meta?.changes??result?.changes??0);
     if(changed<1) {
       const current=await getUserData(env,session.user_id,dataKey);
       return json({error:'Данные изменились на другом устройстве. Сравни версии перед синхронизацией.',current},409);
     }
-    return json({ok:true,value,updatedAt:now});
+    const saved=await getUserData(env,session.user_id,dataKey);
+    return json({ok:true,value:saved.value,updatedAt:saved.updatedAt});
   }
   return fail(404,'API endpoint не найден.');
 }
