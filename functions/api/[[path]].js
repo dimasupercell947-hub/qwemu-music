@@ -51,7 +51,7 @@ async function derivePassword(password,salt) {
   return base64url(new Uint8Array(bits));
 }
 async function rateAllowed(request,env,scope) {
-  if(!env.RATE_LIMIT_SECRET || !env.DB)throw new Error('Auth backend is not configured.');
+  if(!env.DB || typeof env.RATE_LIMIT_SECRET !== 'string' || env.RATE_LIMIT_SECRET.length === 0)throw new Error('Auth backend is not configured.');
   const address=request.headers.get('CF-Connecting-IP')||'unknown';
   const key=await digest(`${env.RATE_LIMIT_SECRET}:${scope}:${address}`);
   const minute=Math.floor(Date.now()/60_000);
@@ -128,9 +128,14 @@ async function handle(request,env) {
   const url=new URL(request.url);const path=url.pathname;const method=request.method.toUpperCase();
   if(method==='GET'&&path==='/api/health') {
     if(!env.DB)return fail(503,'D1 database binding не настроен.');
+    const rateLimitConfigured = typeof env.RATE_LIMIT_SECRET === 'string' && env.RATE_LIMIT_SECRET.length > 0;
+    const rateLimitStrong = rateLimitConfigured
+      && encoder.encode(env.RATE_LIMIT_SECRET).byteLength >= 32
+      && env.RATE_LIMIT_SECRET === env.RATE_LIMIT_SECRET.trim();
+    if(!rateLimitConfigured)return fail(503,'RATE_LIMIT_SECRET не настроен.');
     try {
       await env.DB.prepare('SELECT 1 AS ready').first();
-      return json({ok:true,service:'QWEMU Web API',version:'1.4.0',databaseConfigured:true,databaseReady:true});
+      return json({ok:true,service:'QWEMU Web API',version:'1.4.0',databaseConfigured:true,databaseReady:true,rateLimitConfigured:true,rateLimitStrong});
     } catch {
       return fail(503,'D1 database недоступна.');
     }
@@ -196,7 +201,11 @@ async function handle(request,env) {
     if(name.length<2||name.length>32)return fail(400,'Имя должно содержать 2–32 символа.');
     if(!validEmail(email))return fail(400,'Проверь адрес электронной почты.');
     try{await env.DB.prepare('UPDATE users SET display_name=?,email=?,updated_at=? WHERE id=?').bind(name,email||null,Math.floor(Date.now()/1000),auth.session.user_id).run();}
-    catch{return fail(409,'Адрес электронной почты уже используется.');}
+    catch(error){
+      const message=String(error?.message||'').toLowerCase();
+      if(message.includes('unique constraint')&&message.includes('email'))return fail(409,'Адрес электронной почты уже используется.');
+      throw error;
+    }
     const row=await env.DB.prepare('SELECT id,username,display_name,email,created_at FROM users WHERE id=?').bind(auth.session.user_id).first();
     return json({user:publicUser(row)});
   }
@@ -238,5 +247,5 @@ async function handle(request,env) {
 
 export async function onRequest(context) {
   try { return await handle(context.request,context.env); }
-  catch (error) { return fail(500,'Внутренняя ошибка сервиса. Проверь настройки backend и журнал Cloudflare.'); }
+  catch (error) { console.error('QWEMU API request failed:', error instanceof Error ? error.message : String(error)); return fail(500,'Внутренняя ошибка сервиса. Проверь настройки backend и журнал Cloudflare.'); }
 }

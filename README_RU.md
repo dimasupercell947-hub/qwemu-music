@@ -61,33 +61,17 @@ npm run dev
 
 ## 2. Создание D1 и подготовка production
 
-Создай базу:
+Создай базу в своём Cloudflare аккаунте:
 
 ```bash
 npm run db:create
 ```
 
-Wrangler выведет настоящий `database_id`. Скопируй его в `wrangler.jsonc` вместо нулевого UUID:
+Сохрани выданный `database_id`. Для рекомендуемого GitHub Actions workflow не нужно записывать production UUID в `wrangler.jsonc`: добавь его как GitHub Secret `CLOUDFLARE_D1_DATABASE_ID`. Временный Wrangler config создаётся перед deploy из этого секрета. `preview_database_id` оставь без изменений — он используется локальным тестовым хранилищем.
 
-```json
-"database_id": "UUID_ИЗ_ВЫВОДА_WRANGLER"
-```
+Удалённые миграции и production secret настраиваются workflow автоматически. Не запускай `npm run db:migrate:remote` отдельно перед первым deploy: GitHub Actions сначала проверяет Cloudflare credentials и `workers.dev`, а затем применяет миграции к D1.
 
-Нулевой UUID в `database_id` — шаблон, его обязательно заменить реальным значением из вывода Wrangler. `preview_database_id` оставь без изменений: он используется только для локального хранилища.
-
-Примени миграции к production D1:
-
-```bash
-npm run db:migrate:remote
-```
-
-Создай production secret:
-
-```bash
-npx wrangler secret put RATE_LIMIT_SECRET
-```
-
-Введи длинное случайное значение. Оно не должно совпадать с локальным значением из `.dev.vars`. Не добавляй секрет в Git, `.env`, `wrangler.jsonc` или frontend-код.
+Для ручного CLI-развёртывания (альтернативный путь) можно указать настоящий `database_id` в `wrangler.jsonc`, отдельно применить миграции командой `npm run db:migrate:remote` и создать secret командой `npx wrangler secret put RATE_LIMIT_SECRET`. Этот способ не нужен при использовании GitHub Actions; не запускай оба сценария параллельно.
 
 ## 3. Проверка и публикация Workers
 
@@ -117,14 +101,13 @@ npm run deploy
 
 Перед публикацией выполняются сборка Worker, синтаксические проверки, smoke-тесты и проверка настоящего D1 ID. Затем запускается `wrangler deploy`.
 
-В Cloudflare Dashboard имя Worker должно быть **`qwemu-music`** — оно должно совпадать с `name` в `wrangler.jsonc`. В настройках Worker → **Settings → Builds** укажи:
+В Cloudflare Dashboard имя Worker должно быть **`qwemu-music`** — оно должно совпадать с `name` в `wrangler.jsonc`. Рекомендуемый production deploy выполняется через GitHub Actions (раздел 4), где D1 ID и секреты безопасно передаются через GitHub Secrets.
 
-- Root directory: `/` (корень репозитория).
-- Build command: `npm run build`.
-- Deploy command: `npm run deploy` (выполняет полный набор проверок и проверяет настоящий D1 UUID перед публикацией).
-- В Cloudflare должен быть подключён именно Worker `qwemu-music`, а не Pages-проект с тем же репозиторием.
+Не включай одновременно автоматическую публикацию из Cloudflare Workers Builds и production workflow GitHub Actions: это создаёт два независимых deploy-процесса. Для GitHub Actions не используй `npm run deploy` в Cloudflare Deploy command. Если Cloudflare Builds нужен только для preview, настрой для него отдельную preview-конфигурацию и preview D1; production `database_id` и production secrets не должны использоваться в preview.
 
-Затем проверь binding `DB` (D1 `qwemu-web`) и secret `RATE_LIMIT_SECRET`. Для собственного домена подключи Custom Domain в настройках Worker.
+Ручная команда `npm run deploy` остаётся доступна для уже настроенного Wrangler профиля: с настоящим production `database_id` и заранее созданным `RATE_LIMIT_SECRET` в Cloudflare. Для первой production установки используй GitHub Actions workflow.
+
+Для собственного домена подключи Custom Domain в настройках Worker.
 
 ## Маршрутизация и заголовки
 
@@ -149,3 +132,42 @@ npm run deploy
 ## Desktop и ошибка cpal
 
 Windows-ошибка `cpal` / `Access is denied (os error 5)` относится к локальной сборке Desktop на Windows. Она не относится к Cloudflare Web Edition: в этом проекте нет Tauri, Rust, cpal или rodio. Не указывай Desktop-папку как корень Cloudflare-проекта.
+
+## 4. Production-публикация через GitHub Actions
+
+В репозитории есть ручной workflow `.github/workflows/deploy.yml`. Он проводит проверки, применяет remote D1 migrations и публикует Worker вместе с `RATE_LIMIT_SECRET` через временный `wrangler.secrets.json` и параметр `--secrets-file`. Код и секрет активируются одной версией Worker. Production-публикация не запускается автоматически при каждом push.
+
+### Подготовка Cloudflare
+
+1. В своём Cloudflare аккаунте создай D1 с именем `qwemu-web` (например, командой `npm run db:create` после `npx wrangler login`). Сохрани выданный UUID.
+2. Получи Account ID из панели Cloudflare.
+3. Создай API Token с правами D1 Edit, Workers Scripts Write и Account Settings Read. Workers Scripts Write нужен для read-only проверки workers.dev subdomain и публикации Worker. При самой первой публикации, если Worker ещё не существует, токену может потребоваться Workers Admin на уровне продукта; после создания Worker доступ можно сузить до Editor для этого Worker.
+4. Не передавай API Token или значения секретов в чат и не добавляй их в файлы репозитория.
+
+### GitHub Actions secrets
+
+Открой GitHub → Settings → Secrets and variables → Actions → New repository secret и добавь:
+
+| Имя секрета | Значение |
+|---|---|
+| `CLOUDFLARE_API_TOKEN` | Cloudflare API Token |
+| `CLOUDFLARE_ACCOUNT_ID` | 32-символьный Account ID |
+| `CLOUDFLARE_D1_DATABASE_ID` | UUID D1 базы `qwemu-web` |
+| `RATE_LIMIT_SECRET` | Случайное значение длиной не менее 32 байт |
+
+Секрет `RATE_LIMIT_SECRET` нужен именно Worker для rate limit. Скрипт создаёт временный `wrangler.deploy.jsonc` с ID аккаунта и D1 и отдельный `wrangler.secrets.json` для безопасной передачи секрета в один deploy. Значение секрета не выводится в лог; оба файла игнорируются Git и удаляются в конце workflow.
+
+### Настройка workers.dev
+
+Перед первой публикацией открой Cloudflare Dashboard → **Workers & Pages** → **Overview** → **Your subdomain** и зарегистрируй уникальный поддомен `workers.dev`. Текущий Worker не привязан к собственному домену, поэтому используется адрес `qwemu-music.<поддомен>.workers.dev`. GitHub Actions проверяет наличие поддомена через Cloudflare API до remote D1 migrations и останавливается с понятной ошибкой, если он не настроен.
+
+### Запуск
+
+1. Открой вкладку **Actions** репозитория.
+2. Выбери **Deploy QWEMU to Cloudflare** → **Run workflow**.
+3. Для `confirm_production` выбери **yes**.
+4. В необязательное поле `health_url` можно вставить полный адрес endpoint, например `https://<твой-worker-домен>/api/health`. Тогда workflow дополнительно проверит HTTP 200, `databaseReady=true` и `rateLimitStrong=true`.
+
+Workflow последовательно запускает `npm run check`, `npm run test:integration`, проверяет Cloudflare credentials и workers.dev subdomain, затем применяет миграции и публикует Worker вместе с секретом в одной версии. Проверка workers.dev выполняется до изменения production D1. Health endpoint проверяет доступность D1 и наличие непустого `RATE_LIMIT_SECRET`; поле `rateLimitStrong` отдельно сообщает, соответствует ли секрет рекомендации в 32 байта. Старые непустые секреты продолжают работать после обновления, а новый GitHub Actions deploy требует длинный секрет без пробелов по краям. Если health URL не задан, успешная публикация не означает, что внешний HTTP health-check был выполнен: проверь `/api/health` вручную.
+
+Обычный `npm run deploy` по-прежнему предназначен для локального Wrangler-профиля с настоящим `database_id` в `wrangler.jsonc`. Для GitHub Actions используется временная production-конфигурация, поэтому production UUID не нужно коммитить в репозиторий.
