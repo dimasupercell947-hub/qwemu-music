@@ -67,5 +67,7 @@ assert.ok(assetsIgnore.split(/\r?\n/g).includes('_worker.js'), 'Worker internals
 assert.ok(assetsIgnore.split(/\r?\n/g).includes('_headers'), 'Служебный _headers не должен публиковаться как файл');
 assert.equal(await exists('dist/worker/index.js'), true, 'Не найден сгенерированный Worker bundle');
 assert.equal(await exists('scripts/check-deploy.mjs'), true, 'Отсутствует pre-deploy validation');
+assert.equal(await exists('scripts/prepare-deploy.mjs'), true, 'Отсутствует безопасная подготовка production config');
+assert.equal(await exists('.github/workflows/deploy.yml'), true, 'Отсутствует workflow production deploy');
 console.log('QWEMU Cloudflare smoke tests: PASS');
 console.log('Проверено: HTML, локальные ресурсы, JS imports, API routes/security markers, Workers routing, D1 config/schema, headers и Worker bundle.');
