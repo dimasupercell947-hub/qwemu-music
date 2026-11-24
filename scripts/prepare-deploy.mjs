@@ -18,7 +18,7 @@ export function buildDeployConfig(baseConfig, env) {
   if (!UUID.test(databaseId) || databaseId === '00000000-0000-0000-0000-000000000000') {
     throw new Error('CLOUDFLARE_D1_DATABASE_ID отсутствует или не является настоящим UUID D1.');
   }
-  if (new TextEncoder().encode(rateLimitSecret).byteLength < 32 || /^\\s+$/.test(rateLimitSecret)) {
+  if (new TextEncoder().encode(rateLimitSecret).byteLength < 32 || /^\s+$/.test(rateLimitSecret)) {
     throw new Error('RATE_LIMIT_SECRET должен содержать не менее 32 байт.');
   }
 
