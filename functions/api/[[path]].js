@@ -78,10 +78,21 @@ async function requireCsrf(request,env) {
   return {session};
 }
 function publicUser(row) { return {id:row.id,username:row.username,displayName:row.display_name,email:row.email||'',createdAt:row.created_at}; }
+async function createSessionRecord(env,userId,now=Math.floor(Date.now()/1000)) {
+  const token=base64url(randomBytes(32));
+  const csrf=base64url(randomBytes(32));
+  const tokenHash=await digest(token);
+  const csrfHash=await digest(csrf);
+  const statement=env.DB.prepare('INSERT INTO sessions(token_hash,user_id,csrf_hash,created_at,expires_at) VALUES(?,?,?,?,?)')
+    .bind(tokenHash,userId,csrfHash,now,now+SESSION_SECONDS);
+  return {token,csrf,statement};
+}
 async function issueSession(env,userId) {
-  const token=base64url(randomBytes(32));const csrf=base64url(randomBytes(32));const now=Math.floor(Date.now()/1000);
-  await env.DB.prepare('INSERT INTO sessions(token_hash,user_id,csrf_hash,created_at,expires_at) VALUES(?,?,?,?,?)').bind(await digest(token),userId,await digest(csrf),now,now+SESSION_SECONDS).run();
-  return {token,csrf};
+  const now=Math.floor(Date.now()/1000);
+  await env.DB.prepare('DELETE FROM sessions WHERE expires_at <= ?').bind(now).run();
+  const record=await createSessionRecord(env,userId,now);
+  await record.statement.run();
+  return {token:record.token,csrf:record.csrf};
 }
 function normalizeValue(key,value) {
   if(key==='playlists') {
@@ -115,7 +126,15 @@ async function getUserData(env,userId,key) {
 }
 async function handle(request,env) {
   const url=new URL(request.url);const path=url.pathname;const method=request.method.toUpperCase();
-  if(method==='GET'&&path==='/api/health')return json({ok:true,service:'QWEMU Web API',version:'1.4.0',databaseConfigured:Boolean(env.DB)});
+  if(method==='GET'&&path==='/api/health') {
+    if(!env.DB)return fail(503,'D1 database binding не настроен.');
+    try {
+      await env.DB.prepare('SELECT 1 AS ready').first();
+      return json({ok:true,service:'QWEMU Web API',version:'1.4.0',databaseConfigured:true,databaseReady:true});
+    } catch {
+      return fail(503,'D1 database недоступна.');
+    }
+  }
   if(!env.DB)return fail(503,'D1 database binding не настроен.');
   if(path==='/api/auth/register'&&method==='POST'||path==='/api/auth/login'&&method==='POST') {
     if(!originAllowed(request))return fail(403,'Запрос отклонён проверкой источника.');
@@ -131,9 +150,22 @@ async function handle(request,env) {
       if(!validEmail(email))return fail(400,'Проверь адрес электронной почты.');
       if(password.length<8||password.length>128)return fail(400,'Пароль должен содержать 8–128 символов.');
       const salt=randomBytes(16);const hash=await derivePassword(password,salt);const id=crypto.randomUUID();const now=Math.floor(Date.now()/1000);
-      try{await env.DB.prepare('INSERT INTO users(id,username,display_name,email,password_salt,password_hash,created_at) VALUES(?,?,?,?,?,?,?)').bind(id,username,displayName,email||null,base64url(salt),hash,now).run();}
-      catch{return fail(409,'Имя пользователя или адрес электронной почты уже заняты.');}
-      const session=await issueSession(env,id);const response=json({user:{id,username,displayName,email,createdAt:now}} ,201);
+      await env.DB.prepare('DELETE FROM sessions WHERE expires_at <= ?').bind(now).run();
+      const session=await createSessionRecord(env,id,now);
+      try {
+        await env.DB.batch([
+          env.DB.prepare('INSERT INTO users(id,username,display_name,email,password_salt,password_hash,created_at) VALUES(?,?,?,?,?,?,?)')
+            .bind(id,username,displayName,email||null,base64url(salt),hash,now),
+          session.statement
+        ]);
+      } catch(error) {
+        const message=String(error?.message||'').toLowerCase();
+        if(message.includes('unique constraint')||message.includes('users.username')||message.includes('users.email')) {
+          return fail(409,'Имя пользователя или адрес электронной почты уже заняты.');
+        }
+        throw error;
+      }
+      const response=json({user:{id,username,displayName,email,createdAt:now}} ,201);
       return appendCookies(response,[sessionCookie(session.token),csrfCookie(session.csrf)]);
     }
     if(username.length>20||password.length<1||password.length>128)return fail(400,'Проверь имя пользователя и пароль.');
@@ -181,9 +213,22 @@ async function handle(request,env) {
     if(method==='GET')return json(await getUserData(env,session.user_id,dataKey));
     let body;try{body=await readJson(request);}catch(error){return fail(400,error.message);}
     let value;try{value=normalizeValue(dataKey,body.value);}catch(error){return fail(400,error.message);}
-    const now=Math.floor(Date.now()/1000);
-    await env.DB.prepare(`INSERT INTO user_data(user_id,data_key,data_json,updated_at) VALUES(?,?,?,?)
-      ON CONFLICT(user_id,data_key) DO UPDATE SET data_json=excluded.data_json,updated_at=excluded.updated_at`).bind(session.user_id,dataKey,JSON.stringify(value),now).run();
+    const expectedUpdatedAt=body.expectedUpdatedAt;
+    if(expectedUpdatedAt!==null&&(!Number.isSafeInteger(expectedUpdatedAt)||expectedUpdatedAt<0)) {
+      return fail(400,'expectedUpdatedAt должен быть целым числом или null.');
+    }
+    if(!Object.prototype.hasOwnProperty.call(body,'expectedUpdatedAt')) {
+      return fail(400,'Для синхронизации требуется версия expectedUpdatedAt.');
+    }
+    const now=Date.now();
+    const result=await env.DB.prepare(`INSERT INTO user_data(user_id,data_key,data_json,updated_at) VALUES(?,?,?,?)
+      ON CONFLICT(user_id,data_key) DO UPDATE SET data_json=excluded.data_json,updated_at=excluded.updated_at
+      WHERE user_data.updated_at=?`).bind(session.user_id,dataKey,JSON.stringify(value),now,expectedUpdatedAt).run();
+    const changed=Number(result?.meta?.changes??result?.changes??0);
+    if(changed<1) {
+      const current=await getUserData(env,session.user_id,dataKey);
+      return json({error:'Данные изменились на другом устройстве. Сравни версии перед синхронизацией.',current},409);
+    }
     return json({ok:true,value,updatedAt:now});
   }
   return fail(404,'API endpoint не найден.');
