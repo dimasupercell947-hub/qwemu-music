@@ -35,6 +35,7 @@ assert.match(api, /X-QWEMU-CSRF/, 'Не найдена CSRF-проверка');
 assert.match(api, /HttpOnly; Secure; SameSite=Lax/, 'Неправильные атрибуты session cookie');
 
 const config = JSON.parse(await read('wrangler.jsonc'));
+assert.equal(config.name, 'qwemu-music', 'Worker name должен совпадать с подключённым Workers service');
 assert.equal(config.main, './dist/worker/index.js', 'Worker main должен указывать на собранный bundle');
 assert.equal(config.assets?.directory, './public', 'Неправильный каталог Static Assets');
 assert.equal(config.assets?.binding, 'ASSETS', 'Не настроен ASSETS binding');
@@ -44,6 +45,7 @@ assert.deepEqual(config.assets?.run_worker_first, ['/api/*'], 'API должен 
 const db = config.d1_databases?.find(item => item.binding === 'DB');
 assert.ok(db, 'Не настроен D1 binding DB');
 assert.equal(db.database_name, 'qwemu-web', 'Неправильное имя D1 database');
+assert.equal(db.preview_database_id, '00000000-0000-0000-0000-000000000000', 'Local D1 должен иметь стабильный preview_database_id');
 assert.equal(db.migrations_dir, 'migrations', 'Не настроен каталог миграций');
 assert.match(db.database_id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, 'database_id должен иметь формат UUID');
 
@@ -61,7 +63,7 @@ assert.ok(files.includes('main.js') && files.includes('app.css') && files.includ
 assert.equal(await exists('public/_routes.json'), false, 'Старый Pages _routes.json не должен оставаться в Workers-проекте');
 assert.equal(await exists('public/.assetsignore.'), false, 'Некорректный .assetsignore. не должен оставаться в проекте');
 const assetsIgnore = await read('public/.assetsignore');
-assert.ok(assetsIgnore.split(String.fromCharCode(10)).includes('_worker.js'), 'Worker internals должны исключаться из Static Assets');
+assert.ok(assetsIgnore.split(/\r?\n/g).includes('_worker.js'), 'Worker internals должны исключаться из Static Assets');
 assert.ok(assetsIgnore.split(String.fromCharCode(10)).includes('_headers'), 'Служебный _headers не должен публиковаться как файл');
 assert.equal(await exists('dist/worker/index.js'), true, 'Не найден сгенерированный Worker bundle');
 assert.equal(await exists('scripts/check-deploy.mjs'), true, 'Отсутствует pre-deploy validation');
