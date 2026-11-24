@@ -152,7 +152,7 @@ Windows-ошибка `cpal` / `Access is denied (os error 5)` относится
 
 ## 4. Production-публикация через GitHub Actions
 
-В репозитории есть ручной workflow `.github/workflows/deploy.yml`. Он проводит проверки, применяет remote D1 migrations, публикует Worker, затем устанавливает `RATE_LIMIT_SECRET` через stdin. Wrangler создаёт новую версию Worker после обновления секрета. Production-публикация не запускается автоматически при каждом push.
+В репозитории есть ручной workflow `.github/workflows/deploy.yml`. Он проводит проверки, применяет remote D1 migrations и публикует Worker вместе с `RATE_LIMIT_SECRET` через временный `wrangler.secrets.json` и параметр `--secrets-file`. Код и секрет активируются одной версией Worker. Production-публикация не запускается автоматически при каждом push.
 
 ### Подготовка Cloudflare
 
@@ -172,7 +172,7 @@ Windows-ошибка `cpal` / `Access is denied (os error 5)` относится
 | `CLOUDFLARE_D1_DATABASE_ID` | UUID D1 базы `qwemu-web` |
 | `RATE_LIMIT_SECRET` | Случайное значение длиной не менее 32 байт |
 
-Секрет `RATE_LIMIT_SECRET` нужен именно Worker для rate limit. Скрипт создаёт временный `wrangler.deploy.jsonc` с ID аккаунта и D1, но не записывает значение секрета в этот файл. Временная конфигурация игнорируется Git и удаляется в конце workflow.
+Секрет `RATE_LIMIT_SECRET` нужен именно Worker для rate limit. Скрипт создаёт временный `wrangler.deploy.jsonc` с ID аккаунта и D1 и отдельный `wrangler.secrets.json` для безопасной передачи секрета в один deploy. Значение секрета не выводится в лог; оба файла игнорируются Git и удаляются в конце workflow.
 
 ### Настройка workers.dev
 
@@ -183,8 +183,8 @@ Windows-ошибка `cpal` / `Access is denied (os error 5)` относится
 1. Открой вкладку **Actions** репозитория.
 2. Выбери **Deploy QWEMU to Cloudflare** → **Run workflow**.
 3. Для `confirm_production` выбери **yes**.
-4. В необязательное поле `health_url` можно вставить полный адрес endpoint, например `https://<твой-worker-домен>/api/health`. Тогда workflow дополнительно проверит HTTP 200 и `databaseReady=true`.
+4. В необязательное поле `health_url` можно вставить полный адрес endpoint, например `https://<твой-worker-домен>/api/health`. Тогда workflow дополнительно проверит HTTP 200, `databaseReady=true` и `rateLimitStrong=true`.
 
-Workflow последовательно запускает `npm run check`, `npm run test:integration`, проверяет Cloudflare credentials и workers.dev subdomain, затем применяет миграции, публикует Worker и задаёт секрет через stdin. Проверка workers.dev выполняется до изменения production D1. Health endpoint проверяет доступность D1 и наличие непустого `RATE_LIMIT_SECRET`; поле `rateLimitStrong` отдельно сообщает, соответствует ли секрет рекомендации в 32 байта. Старые непустые секреты продолжают работать после обновления, а новый GitHub Actions deploy требует длинный секрет без пробелов по краям. Если health URL не задан, успешная публикация не означает, что внешний HTTP health-check был выполнен: проверь `/api/health` вручную.
+Workflow последовательно запускает `npm run check`, `npm run test:integration`, проверяет Cloudflare credentials и workers.dev subdomain, затем применяет миграции и публикует Worker вместе с секретом в одной версии. Проверка workers.dev выполняется до изменения production D1. Health endpoint проверяет доступность D1 и наличие непустого `RATE_LIMIT_SECRET`; поле `rateLimitStrong` отдельно сообщает, соответствует ли секрет рекомендации в 32 байта. Старые непустые секреты продолжают работать после обновления, а новый GitHub Actions deploy требует длинный секрет без пробелов по краям. Если health URL не задан, успешная публикация не означает, что внешний HTTP health-check был выполнен: проверь `/api/health` вручную.
 
 Обычный `npm run deploy` по-прежнему предназначен для локального Wrangler-профиля с настоящим `database_id` в `wrangler.jsonc`. Для GitHub Actions используется временная production-конфигурация, поэтому production UUID не нужно коммитить в репозиторий.
