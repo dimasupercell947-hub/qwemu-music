@@ -39,7 +39,7 @@ export function buildDeployConfig(baseConfig, env) {
 async function main() {
   const source = JSON.parse(await readFile(resolve(root, 'wrangler.jsonc'), 'utf8'));
   const config = buildDeployConfig(source, process.env);
-  await writeFile(outputPath, `${JSON.stringify(config, null, 2)}\\n`, { encoding: 'utf8', mode: 0o600 });
+  await writeFile(outputPath, `${JSON.stringify(config, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
   console.log('Cloudflare production config prepared. Account/D1 IDs validated; RATE_LIMIT_SECRET was not written to disk.');
 }
 
