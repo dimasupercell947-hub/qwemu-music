@@ -31,6 +31,7 @@ for (const route of ['/api/health', '/api/auth/register', '/api/auth/login', '/a
   assert.ok(api.includes(route), `В API отсутствует ожидаемый маршрут/обработчик: ${route}`);
 }
 assert.match(api, /RATE_LIMIT_SECRET/, 'Не найдена защита rate limit');
+assert.match(api, /rateLimitConfigured/, 'Health check должен проверять конфигурацию rate limit');
 assert.match(api, /X-QWEMU-CSRF/, 'Не найдена CSRF-проверка');
 assert.match(api, /HttpOnly; Secure; SameSite=Lax/, 'Неправильные атрибуты session cookie');
 
