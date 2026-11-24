@@ -3,7 +3,33 @@ import { File } from 'node:buffer';
 import { fingerprintFile } from '../public/assets/file-fingerprint.js';
 import { CloudWriteQueue } from '../public/assets/cloud-write-queue.js';
 import { buildDeployConfig } from '../scripts/prepare-deploy.mjs';
+import { onRequest } from '../functions/api/[[path]].js';
 
+
+
+async function testWorkerReadiness() {
+  const request = new Request('https://qwemu.test/api/health');
+  const noDatabase = await onRequest({ request, env: {} });
+  assert.equal(noDatabase.status, 503, 'Health должен блокироваться без D1 binding');
+
+  const noSecret = await onRequest({
+    request,
+    env: { DB: { prepare: () => ({ first: async () => ({ ready: 1 }) }) } }
+  });
+  assert.equal(noSecret.status, 503, 'Health не должен быть успешным без RATE_LIMIT_SECRET');
+
+  const ready = await onRequest({
+    request,
+    env: {
+      DB: { prepare: () => ({ first: async () => ({ ready: 1 }) }) },
+      RATE_LIMIT_SECRET: 'r'.repeat(32)
+    }
+  });
+  assert.equal(ready.status, 200, 'Health должен вернуть 200 с D1 и корректным secret');
+  const payload = await ready.json();
+  assert.equal(payload.databaseReady, true);
+  assert.equal(payload.rateLimitConfigured, true);
+}
 
 function testDeployConfig() {
   const zeroId = '00000000-0000-0000-0000-000000000000';
@@ -83,7 +109,8 @@ async function testCloudWriteQueue() {
 }
 
 testDeployConfig();
+await testWorkerReadiness();
 await testFingerprint();
 await testCloudWriteQueue();
 console.log('QWEMU unit tests: PASS');
-console.log('Проверено: production Wrangler config validation, secret isolation, fingerprint stability, invalid file validation, serialized cloud writes and queue recovery.');
+console.log('Проверено: production Wrangler config validation, Worker readiness behavior, secret isolation, fingerprint stability, invalid file validation, serialized cloud writes and queue recovery.');
