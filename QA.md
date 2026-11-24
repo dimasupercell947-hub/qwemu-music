@@ -148,3 +148,20 @@ PASS для npm run check и npm run test:integration фиксируется о�
     Worker log:
     D1 error:
     Скриншот:
+
+## 9. Production deploy automation
+
+Добавлен ручной GitHub Actions workflow `.github/workflows/deploy.yml`.
+
+Перед запуском необходимы repository secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_D1_DATABASE_ID`, `RATE_LIMIT_SECRET`. Ветка CI проверяет сам deploy helper через unit tests и проверяет наличие workflow через smoke tests.
+
+Workflow выполняет:
+1. `npm run check` и `npm run test:integration`.
+2. Проверку формата Account ID, реального D1 UUID и длины RATE_LIMIT_SECRET.
+3. Создание временного `wrangler.deploy.jsonc` без записи RATE_LIMIT_SECRET.
+4. Проверку авторизации Wrangler.
+5. Remote D1 migrations.
+6. Публикацию Worker/Static Assets и передачу RATE_LIMIT_SECRET через stdin.
+7. Необязательную проверку production `/api/health`, если задан health_url.
+
+Production deployment не считается проверенным до успешного запуска workflow в аккаунте пользователя. Удалённые миграции, доступность Worker и CPU budget не подтверждаются локальными тестами.
