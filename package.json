@@ -11,7 +11,7 @@
     "db:migrate:local": "wrangler d1 migrations apply qwemu-web --local",
     "db:migrate:remote": "wrangler d1 migrations apply qwemu-web --remote",
     "test": "node tests/smoke.mjs",
-    "check": "npm run build && node --check dist/worker/index.js && node --check \"functions/api/[[path]].js\" && node --check public/assets/main.js && node --check public/assets/api-adapter.js && node --check public/assets/auth-adapter.js && node --check public/assets/audio-adapter.js && node --check scripts/dev.mjs && node --check scripts/check-deploy.mjs && node --check tests/smoke.mjs && node --check tests/unit.mjs && node --check tests/integration.mjs && node tests/smoke.mjs && node tests/unit.mjs && wrangler deploy --dry-run",
+    "check": "npm run build && node --check dist/worker/index.js && node --check \"functions/api/[[path]].js\" && node --check public/assets/main.js && node --check public/assets/api-adapter.js && node --check public/assets/auth-adapter.js && node --check public/assets/audio-adapter.js && node --check scripts/dev.mjs && node --check scripts/check-deploy.mjs && node --check scripts/prepare-deploy.mjs && node --check tests/smoke.mjs && node --check tests/unit.mjs && node --check tests/integration.mjs && node tests/smoke.mjs && node tests/unit.mjs && wrangler deploy --dry-run",
     "test:integration": "node tests/integration.mjs",
     "test:ci": "npm run check && npm run test:integration"
   },
