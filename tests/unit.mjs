@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { File } from 'node:buffer';
 import { fingerprintFile } from '../public/assets/file-fingerprint.js';
 import { CloudWriteQueue } from '../public/assets/cloud-write-queue.js';
-import { buildDeployConfig } from '../scripts/prepare-deploy.mjs';
+import { buildDeployConfig, buildDeploySecrets } from '../scripts/prepare-deploy.mjs';
 import { onRequest } from '../functions/api/[[path]].js';
 import { checkWorkersSubdomain } from '../scripts/check-cloudflare.mjs';
 
@@ -106,6 +106,8 @@ function testDeployConfig() {
     CLOUDFLARE_D1_DATABASE_ID: '12345678-1234-4abc-8def-123456789abc',
     RATE_LIMIT_SECRET: secret
   };
+  const secretPayload = buildDeploySecrets(env);
+  assert.deepEqual(secretPayload, { RATE_LIMIT_SECRET: secret });
   const deployed = buildDeployConfig(source, env);
   assert.equal(deployed.account_id, env.CLOUDFLARE_ACCOUNT_ID);
   assert.equal(deployed.d1_databases[0].database_id, env.CLOUDFLARE_D1_DATABASE_ID);
