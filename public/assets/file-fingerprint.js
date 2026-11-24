@@ -24,7 +24,8 @@ export async function fingerprintFile(file) {
   const samples = await Promise.all(offsets.map(async offset => new Uint8Array(
     await file.slice(offset, Math.min(file.size, offset + SAMPLE_BYTES)).arrayBuffer()
   )));
-  const metadata = new TextEncoder().encode(`${String(file.name || '')}\0${file.size}\0${Number(file.lastModified) || 0}\0`);
+  // Device-specific names and timestamps must not affect cross-device identity.
+  const metadata = new TextEncoder().encode(`${file.size}\0`);
   const totalBytes = metadata.length + samples.reduce((total, sample) => total + 8 + sample.length, 0);
   const payload = new Uint8Array(totalBytes);
   const view = new DataView(payload.buffer);
