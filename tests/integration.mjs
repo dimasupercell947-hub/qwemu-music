@@ -136,17 +136,24 @@ try {
   });
   check(firstWrite.response.status === 200 && Number.isSafeInteger(firstWrite.payload.updatedAt), 'Первая синхронизация должна создать версионированную запись');
 
+  const secondWrite = await jsonRequest('/api/playlists', {
+    method: 'PUT',
+    headers: csrfHeaders,
+    body: { value: [{ id: 'qa-playlist', name: 'QA Playlist v2', description: '', trackIds: [] }], expectedUpdatedAt: firstWrite.payload.updatedAt }
+  });
+  check(secondWrite.response.status === 200 && secondWrite.payload.updatedAt > firstWrite.payload.updatedAt, 'Версия должна строго увеличиваться даже при нескольких записях в одну миллисекунду');
+
   const staleWrite = await jsonRequest('/api/playlists', {
     method: 'PUT',
     headers: csrfHeaders,
-    body: { value: [], expectedUpdatedAt: null }
+    body: { value: [], expectedUpdatedAt: firstWrite.payload.updatedAt }
   });
-  check(staleWrite.response.status === 409 && staleWrite.payload.current?.value?.[0]?.id === 'qa-playlist', 'Устаревшая запись должна получить конфликт, а не воскресить/перезаписать данные');
+  check(staleWrite.response.status === 409 && staleWrite.payload.current?.value?.[0]?.name === 'QA Playlist v2', 'Устаревшая запись должна получить конфликт, а не перезаписать более новую версию');
 
   const deleteWrite = await jsonRequest('/api/playlists', {
     method: 'PUT',
     headers: csrfHeaders,
-    body: { value: [], expectedUpdatedAt: firstWrite.payload.updatedAt }
+    body: { value: [], expectedUpdatedAt: secondWrite.payload.updatedAt }
   });
   check(deleteWrite.response.status === 200 && deleteWrite.payload.value.length === 0, 'Удаление должно сохраниться с актуальной версией');
 
