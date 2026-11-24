@@ -1,5 +1,6 @@
 import { readFile, access } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const config = JSON.parse(await readFile(new URL('../wrangler.jsonc', import.meta.url), 'utf8'));
 const database = config.d1_databases?.find(item => item.binding === 'DB');
@@ -15,7 +16,7 @@ if (!config.main || !config.assets?.directory || !config.assets?.run_worker_firs
   process.exit(1);
 }
 try {
-  await access(resolve(new URL('../', import.meta.url).pathname, config.main));
+  await access(resolve(fileURLToPath(new URL('../', import.meta.url)), config.main));
 } catch {
   console.error(`DEPLOY BLOCKED: Worker bundle не найден: ${config.main}. Сначала выполни npm run build.`);
   process.exit(1);
