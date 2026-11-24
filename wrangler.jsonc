@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "qwemu",
+  "name": "qwemu-music",
   "main": "./dist/worker/index.js",
   "compatibility_date": "2026-11-24",
   "assets": {
@@ -14,6 +14,7 @@
       "binding": "DB",
       "database_name": "qwemu-web",
       "database_id": "00000000-0000-0000-0000-000000000000",
+      "preview_database_id": "00000000-0000-0000-0000-000000000000",
       "migrations_dir": "migrations"
     }
   ],
