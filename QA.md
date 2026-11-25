@@ -115,22 +115,22 @@ GitHub Actions выполняет `npm run check` и `npm run test:integration` 
 - [ ] Worker logs, D1 errors, p95 и CPU time.
 - [ ] Production deploy и smoke после deploy.
 
-## 6. Cloudflare production checklist
+## 6. Production checklist — GitHub Actions
 
-- [ ] Подключён Worker qwemu-music, а не Pages project.
-- [ ] Workers Builds Root directory: /.
-- [ ] Build command: npm run build.
-- [ ] Deploy command: npx wrangler deploy.
-- [ ] Production UUID добавлен в GitHub Secret `CLOUDFLARE_D1_DATABASE_ID`; в `wrangler.jsonc` остаётся нулевой шаблон.
-- [ ] `preview_database_id` оставлен стабильным для локальной D1.
-- [ ] Добавлены GitHub Secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_D1_DATABASE_ID`, `RATE_LIMIT_SECRET`.
-- [ ] Зарегистрирован `workers.dev` subdomain.
-- [ ] Workflow применил production D1 migrations к правильной базе.
-- [ ] Worker опубликован вместе с `RATE_LIMIT_SECRET` одной версией.
-- [ ] Production `/api/health` подтвердил D1 и сильный rate-limit secret.
-- [ ] После deploy проверены API, авторизация, синхронизация и статика.
+- [ ] В Cloudflare существует Worker `qwemu-music`; Pages-проект не используется как production target.
+- [ ] Cloudflare Workers Builds не публикует production Worker параллельно с GitHub Actions.
+- [ ] Для GitHub Actions добавлены Secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_D1_DATABASE_ID`, `RATE_LIMIT_SECRET`.
+- [ ] Production UUID хранится только в GitHub Secret `CLOUDFLARE_D1_DATABASE_ID`; `wrangler.jsonc` содержит нулевой шаблон.
+- [ ] `preview_database_id` оставлен стабильным для изолированной локальной D1.
+- [ ] Зарегистрирован `workers.dev` subdomain либо настроены custom routes/domain и `workers_dev=false`.
+- [ ] Workflow прошёл build, unit, smoke и Worker/D1 integration checks.
+- [ ] Read-only Cloudflare preflight подтвердил настройки до remote D1 migrations.
+- [ ] Remote D1 migrations применены к правильной базе.
+- [ ] Worker опубликован вместе с `RATE_LIMIT_SECRET` одной версией через `--secrets-file`.
+- [ ] Production `/api/health` подтвердил D1 и `rateLimitStrong=true`.
+- [ ] После deploy проверены API, авторизация, синхронизация и Static Assets.
 
-Не коммитить секреты, cookies, пароли и production credentials.
+Не коммитить секреты, cookies, пароли и production credentials. Для preview используй отдельную конфигурацию и отдельную тестовую D1; никогда не направляй preview build на production DB.
 
 ## 7. Достоверность статусов
 
