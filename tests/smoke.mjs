@@ -47,6 +47,7 @@ assert.deepEqual(config.assets?.run_worker_first, ['/api/*'], 'API должен 
 const db = config.d1_databases?.find(item => item.binding === 'DB');
 assert.ok(db, 'Не настроен D1 binding DB');
 assert.equal(db.database_name, 'qwemu-web', 'Неправильное имя D1 database');
+assert.equal(db.database_id, '00000000-0000-0000-0000-000000000000', 'Production D1 UUID должен передаваться через GitHub Secret, а не коммититься в репозиторий');
 assert.equal(db.preview_database_id, '00000000-0000-0000-0000-000000000000', 'Local D1 должен иметь стабильный preview_database_id');
 assert.equal(db.migrations_dir, 'migrations', 'Не настроен каталог миграций');
 assert.match(db.database_id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, 'database_id должен иметь формат UUID');
@@ -56,6 +57,8 @@ assert.ok(headers.includes('Content-Security-Policy:'), 'Не настроена
 assert.ok(headers.includes('X-Content-Type-Options: nosniff'), 'Не настроен nosniff');
 
 const sql = await read('migrations/0001_initial.sql');
+const rateLimitIndex = await read('migrations/0002_rate_limit_window_index.sql');
+assert.match(rateLimitIndex, /CREATE INDEX IF NOT EXISTS idx_rate_limits_window_start ON rate_limits\(window_start\)/i, 'Очистка rate_limits должна использовать индекс по окну времени');
 for (const table of ['users', 'sessions', 'user_data', 'rate_limits']) {
   assert.ok(sql.includes(`CREATE TABLE IF NOT EXISTS ${table}`), `Нет таблицы ${table}`);
 }
