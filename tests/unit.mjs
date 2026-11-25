@@ -60,6 +60,90 @@ async function testWorkersSubdomainPreflight() {
   );
 }
 
+
+async function testWorkerRateLimit() {
+  const originalNow = Date.now;
+  const fixedNow = 1_760_000_000_000;
+  Date.now = () => fixedNow;
+
+  const windows = new Map();
+  const db = {
+    prepare(sql) {
+      if (sql.startsWith('DELETE FROM rate_limits')) {
+        return {
+          bind(cutoff) {
+            return {
+              run: async () => {
+                for (const [key, row] of windows) {
+                  if (row.windowStart < cutoff) windows.delete(key);
+                }
+                return { meta: { changes: 0 } };
+              }
+            };
+          }
+        };
+      }
+      if (sql.startsWith('INSERT INTO rate_limits')) {
+        return {
+          bind(key, windowStart) {
+            return {
+              run: async () => {
+                const previous = windows.get(key);
+                windows.set(key, {
+                  windowStart,
+                  attempts: previous?.windowStart === windowStart ? previous.attempts + 1 : 1
+                });
+                return { meta: { changes: 1 } };
+              }
+            };
+          }
+        };
+      }
+      if (sql.startsWith('SELECT attempts FROM rate_limits')) {
+        return {
+          bind(key) {
+            return {
+              first: async () => {
+                const row = windows.get(key);
+                return row ? { attempts: row.attempts } : null;
+              }
+            };
+          }
+        };
+      }
+      throw new Error(`Unexpected rate-limit SQL: ${sql}`);
+    }
+  };
+
+  try {
+    const env = { DB: db, RATE_LIMIT_SECRET: 'rate-limit-unit-secret'.repeat(2) };
+    const request = () => new Request('https://qwemu.test/api/auth/register', {
+      method: 'POST',
+      headers: {
+        Origin: 'https://qwemu.test',
+        'Content-Type': 'application/json',
+        'CF-Connecting-IP': '203.0.113.10'
+      },
+      body: JSON.stringify({
+        username: 'x',
+        displayName: 'QA Test',
+        email: '',
+        password: 'ValidPassword123!'
+      })
+    });
+
+    for (let attempt = 1; attempt <= 8; attempt++) {
+      const response = await onRequest({ request: request(), env });
+      assert.equal(response.status, 400, `Попытка ${attempt} должна пройти rate limit и завершиться валидацией username`);
+    }
+
+    const limited = await onRequest({ request: request(), env });
+    assert.equal(limited.status, 429, 'Девятая попытка в одном rate-limit окне должна получить HTTP 429');
+  } finally {
+    Date.now = originalNow;
+  }
+}
+
 async function testWorkerReadiness() {
   const request = new Request('https://qwemu.test/api/health');
   const noDatabase = await onRequest({ request, env: {} });
@@ -180,7 +264,8 @@ async function testCloudWriteQueue() {
 testDeployConfig();
 await testWorkersSubdomainPreflight();
 await testWorkerReadiness();
+await testWorkerRateLimit();
 await testFingerprint();
 await testCloudWriteQueue();
 console.log('QWEMU unit tests: PASS');
-console.log('Проверено: production Wrangler config validation, Worker readiness backward compatibility, workers.dev preflight, secret isolation, fingerprint stability, invalid file validation, serialized cloud writes and queue recovery.');
+console.log('Проверено: production Wrangler config validation, Worker readiness backward compatibility, deterministic rate-limit 429, workers.dev preflight, secret isolation, fingerprint stability, invalid file validation, serialized cloud writes and queue recovery.');
