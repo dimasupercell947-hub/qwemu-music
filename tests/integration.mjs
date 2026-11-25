@@ -4,11 +4,27 @@ import { mkdtemp, rm, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
+import { createServer } from 'node:net';
 
 const npmCli = process.env.npm_execpath;
 assert.ok(npmCli, 'Запускай интеграционные тесты через npm run test:integration');
+async function reservePort() {
+  const probe = createServer();
+  await new Promise((resolve, reject) => {
+    probe.once('error', reject);
+    probe.listen(0, '127.0.0.1', resolve);
+  });
+  const address = probe.address();
+  if (!address || typeof address === 'string') {
+    await new Promise(resolve => probe.close(resolve));
+    throw new Error('Не удалось определить свободный TCP-порт для integration test.');
+  }
+  await new Promise((resolve, reject) => probe.close(error => error ? reject(error) : resolve()));
+  return address.port;
+}
+
 const persistDir = await mkdtemp(join(tmpdir(), 'qwemu-d1-'));
-const port = 8789;
+const port = await reservePort();
 const baseUrl = `http://127.0.0.1:${port}`;
 let server;
 
@@ -118,6 +134,27 @@ try {
   });
   check(duplicate.response.status === 409, 'Повторный username должен вернуть 409');
 
+  const rejectedLogin = await jsonRequest('/api/auth/login', {
+    method: 'POST',
+    headers: origin,
+    body: { username, password: 'WrongPassword123!' }
+  });
+  check(rejectedLogin.response.status === 401, 'Неверный пароль должен вернуть HTTP 401');
+
+  const login = await jsonRequest('/api/auth/login', {
+    method: 'POST',
+    headers: origin,
+    body: { username, password }
+  });
+  check(login.response.status === 200 && login.payload.user?.username === username, 'Корректный вход должен вернуть пользователя');
+  const loginCookies = login.response.headers.getSetCookie?.() || [login.response.headers.get('set-cookie') || ''];
+  const loginCookieHeader = loginCookies.map(value => value.split(';')[0]).filter(Boolean).join('; ');
+  const loginCsrf = loginCookies
+    .map(value => value.split(';')[0])
+    .find(value => value.startsWith('QWEMU_CSRF='))
+    ?.split('=').slice(1).join('=');
+  check(Boolean(loginCookieHeader && loginCsrf), 'Вход должен выпустить новую пару session/CSRF cookies');
+
   const noCsrf = await jsonRequest('/api/playlists', {
     method: 'PUT',
     headers: { ...origin, Cookie: cookieHeader },
@@ -129,6 +166,39 @@ try {
   check(initialData.response.status === 200 && initialData.payload.updatedAt === null, 'Новая учётная запись должна иметь пустую начальную версию данных');
 
   const csrfHeaders = { ...origin, Cookie: cookieHeader, 'X-QWEMU-CSRF': csrf };
+
+  const profileUpdate = await jsonRequest('/api/me', {
+    method: 'PUT',
+    headers: csrfHeaders,
+    body: { displayName: 'QA Updated', email: `qa-${Date.now()}@example.com` }
+  });
+  check(profileUpdate.response.status === 200 && profileUpdate.payload.user?.displayName === 'QA Updated', 'Профиль должен обновляться с действующей CSRF-сессией');
+
+  const initialFavorites = await jsonRequest('/api/favorites', { headers: { Cookie: cookieHeader } });
+  check(initialFavorites.response.status === 200 && initialFavorites.payload.updatedAt === null, 'У нового аккаунта избранное должно иметь пустую начальную версию');
+  const favoritesWrite = await jsonRequest('/api/favorites', {
+    method: 'PUT',
+    headers: csrfHeaders,
+    body: { value: ['file-qa-1', 'file-qa-1'], expectedUpdatedAt: null }
+  });
+  check(favoritesWrite.response.status === 200 && favoritesWrite.payload.value.length === 1, 'Избранное должно нормализовать повторяющиеся ID');
+  const favoritesRead = await jsonRequest('/api/favorites', { headers: { Cookie: cookieHeader } });
+  check(favoritesRead.response.status === 200 && favoritesRead.payload.value[0] === 'file-qa-1', 'Избранное должно сохраняться в D1');
+
+  const settingsWrite = await jsonRequest('/api/settings', {
+    method: 'PUT',
+    headers: csrfHeaders,
+    body: { value: { theme: 'orange-night', volume: 0.75, reducedMotion: true }, expectedUpdatedAt: null }
+  });
+  check(settingsWrite.response.status === 200
+    && settingsWrite.payload.value.theme === 'orange-night'
+    && settingsWrite.payload.value.volume === 0.75
+    && settingsWrite.payload.value.reducedMotion === true,
+  'Настройки должны сохраняться и проходить серверную нормализацию');
+
+  const retainedLoginSession = await jsonRequest('/api/me', { headers: { Cookie: loginCookieHeader } });
+  check(retainedLoginSession.response.status === 200, 'Завершение одной сессии не должно отзывать другую активную сессию');
+
   const firstWrite = await jsonRequest('/api/playlists', {
     method: 'PUT',
     headers: csrfHeaders,
@@ -169,8 +239,17 @@ try {
   const afterLogout = await jsonRequest('/api/me', { headers: { Cookie: cookieHeader } });
   check(afterLogout.response.status === 401, 'Старая сессия не должна работать после выхода');
 
+  const loginLogout = await jsonRequest('/api/auth/logout', {
+    method: 'POST',
+    headers: { ...origin, Cookie: loginCookieHeader, 'X-QWEMU-CSRF': loginCsrf },
+    body: {}
+  });
+  check(loginLogout.response.status === 200, 'Вторая сессия должна завершаться независимо');
+  const afterSecondLogout = await jsonRequest('/api/me', { headers: { Cookie: loginCookieHeader } });
+  check(afterSecondLogout.response.status === 401, 'Вторая сессия должна быть отозвана после logout');
+
   console.log('QWEMU Worker + D1 integration tests: PASS');
-  console.log('Проверено: D1 migrations, readiness, JSON 404, Origin, registration, duplicate username, cookies, session, CSRF, CAS conflict, удаление и logout.');
+  console.log('Проверено: migrations/index, readiness, API 404, Origin, registration/login, cookies, profile, favorites/settings, CSRF, CAS conflict, delete, independent sessions and logout. Rate limit 429 is covered by a deterministic unit test.');
 } finally {
   if (server) {
     stopServer(server);

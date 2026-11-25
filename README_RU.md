@@ -11,13 +11,12 @@
 - `public/` — статический сайт, CSS, JS и правила заголовков Workers.
 - `functions/api/[[path]].js` — API авторизации и синхронизации, собирается Wrangler в Worker.
 - `scripts/dev.mjs` — кроссплатформенный dev-запуск: watcher Functions + Wrangler Worker.
-- `tests/` — smoke, fingerprint и Worker/D1 integration tests.
+- `tests/` — smoke, unit и Worker/D1 integration tests.
 - `dist/worker/` — генерируемый Worker bundle; не хранится в Git и не раздаётся как публичный файл.
 - `migrations/` — миграции Cloudflare D1.
 - `wrangler.jsonc` — единая конфигурация Worker, Static Assets и D1.
-- `tests/` — локальные smoke-проверки.
 
-Аудиофайлы выбираются пользователем и воспроизводятся браузером через HTML Audio. Они не загружаются в Cloudflare. В D1 сохраняются только учётные записи, сессии и метаданные (плейлисты, избранное, настройки).
+Аудиофайлы выбираются пользователем и воспроизводятся браузером через HTML Audio. Они не загружаются в Cloudflare. В D1 сохраняются только учётные записи, сессии, rate-limit counters и метаданные (плейлисты, избранное, настройки).
 
 ## Требования
 
@@ -89,7 +88,7 @@ npm run check
 npm run test:integration
 ```
 
-Она проверяет health, API 404, Origin, регистрацию, cookies, сессии, CSRF, конфликты версий, удаление и logout. Временная тестовая база удаляется после завершения.
+Она проверяет health, API 404, Origin, регистрацию и вход, cookies, независимые сессии, обновление профиля, избранное, настройки, CSRF, конфликты версий, удаление и logout. Граничный случай rate limit (HTTP 429) проверяется отдельным unit-тестом с фиксированным временем. Временная тестовая база удаляется после завершения.
 
 Обе группы проверок запускаются последовательно в GitHub Actions на Linux и Windows. Команда `npm run test:ci` запускает обе группы локально.
 
@@ -159,7 +158,7 @@ Windows-ошибка `cpal` / `Access is denied (os error 5)` относится
 
 ### Настройка workers.dev
 
-Перед первой публикацией открой Cloudflare Dashboard → **Workers & Pages** → **Overview** → **Your subdomain** и зарегистрируй уникальный поддомен `workers.dev`. Текущий Worker не привязан к собственному домену, поэтому используется адрес `qwemu-music.<поддомен>.workers.dev`. GitHub Actions проверяет наличие поддомена через Cloudflare API до remote D1 migrations и останавливается с понятной ошибкой, если он не настроен.
+Перед первой публикацией открой Cloudflare Dashboard → **Workers & Pages** → **Overview** → **Your subdomain** и зарегистрируй уникальный поддомен `workers.dev`. Текущий Worker не привязан к собственному домену, поэтому используется адрес `qwemu-music.<поддомен>.workers.dev`. GitHub Actions проверяет наличие поддомена через Cloudflare API до remote D1 migrations. При HTTP 404 workflow отдельно объясняет, что Cloudflare не подтвердил регистрацию поддомена; при 403 указывает на вероятную нехватку разрешений API Token. В обоих случаях миграции production D1 ещё не запускались.
 
 ### Запуск
 

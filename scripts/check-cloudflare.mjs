@@ -6,6 +6,13 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const CONFIG_PATH = resolve(root, process.env.WRANGLER_CONFIG || 'wrangler.deploy.jsonc');
 const ACCOUNT_ID = /^[0-9a-f]{32}$/i;
 
+function subdomainSetupError(detail = '') {
+  const suffix = detail ? ` Подробности Cloudflare API: ${detail}` : '';
+  return new Error(
+    `Cloudflare не подтвердил workers.dev subdomain. Открой Workers & Pages → Overview → Your subdomain и зарегистрируй поддомен, затем повтори deploy. Проверь также разрешение Workers Scripts Read или Write у API Token.${suffix} Production D1 migrations ещё не запускались.`
+  );
+}
+
 export async function checkWorkersSubdomain({ accountId, apiToken, config, fetchImpl = fetch }) {
   const id = String(accountId || '').trim();
   if (!ACCOUNT_ID.test(id)) {
@@ -39,7 +46,15 @@ export async function checkWorkersSubdomain({ accountId, apiToken, config, fetch
   try {
     payload = await response.json();
   } catch {
+    if (response.status === 404) throw subdomainSetupError('HTTP 404: account subdomain endpoint did not return a registered subdomain.');
     throw new Error(`Cloudflare API вернул невалидный JSON при проверке workers.dev (HTTP ${response.status}).`);
+  }
+
+  if (response.status === 404) {
+    const detail = Array.isArray(payload?.errors)
+      ? payload.errors.map(item => item.message).filter(Boolean).join('; ')
+      : '';
+    throw subdomainSetupError(`HTTP 404.${detail ? ` ${detail}` : ''}`);
   }
 
   if (!response.ok || payload?.success !== true) {
@@ -51,7 +66,7 @@ export async function checkWorkersSubdomain({ accountId, apiToken, config, fetch
 
   const subdomain = payload?.result?.subdomain;
   if (typeof subdomain !== 'string' || !/^[a-z0-9-]+$/i.test(subdomain)) {
-    throw new Error('Для аккаунта не настроен workers.dev subdomain. Открой Cloudflare Dashboard → Workers & Pages → Overview → Your subdomain и зарегистрируй поддомен до запуска deploy. Production D1 миграции ещё не запускались.');
+    throw subdomainSetupError('Cloudflare API вернул пустое или некорректное имя поддомена.');
   }
 
   return { required: true, subdomain };
