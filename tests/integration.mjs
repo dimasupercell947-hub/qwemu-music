@@ -249,7 +249,7 @@ try {
   check(afterSecondLogout.response.status === 401, 'Вторая сессия должна быть отозвана после logout');
 
   console.log('QWEMU Worker + D1 integration tests: PASS');
-  console.log('Проверено: migrations/index, readiness, API 404, Origin, rate limit 429, registration/login, cookies, profile, favorites/settings, CSRF, CAS conflict, delete, independent sessions and logout.');
+  console.log('Проверено: migrations/index, readiness, API 404, Origin, registration/login, cookies, profile, favorites/settings, CSRF, CAS conflict, delete, independent sessions and logout. Rate limit 429 is covered by a deterministic unit test.');
 } finally {
   if (server) {
     stopServer(server);
