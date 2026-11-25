@@ -47,7 +47,13 @@ assert.deepEqual(config.assets?.run_worker_first, ['/api/*'], 'API должен 
 const db = config.d1_databases?.find(item => item.binding === 'DB');
 assert.ok(db, 'Не настроен D1 binding DB');
 assert.equal(db.database_name, 'qwemu-web', 'Неправильное имя D1 database');
-assert.equal(db.database_id, '00000000-0000-0000-0000-000000000000', 'Production D1 UUID должен передаваться через GitHub Secret, а не коммититься в репозиторий');
+if (process.env.GITHUB_ACTIONS === 'true') {
+  assert.equal(
+    db.database_id,
+    '00000000-0000-0000-0000-000000000000',
+    'В main должен оставаться нулевой production D1 шаблон; настоящий UUID передаётся через GitHub Secret'
+  );
+}
 assert.equal(db.preview_database_id, '00000000-0000-0000-0000-000000000000', 'Local D1 должен иметь стабильный preview_database_id');
 assert.equal(db.migrations_dir, 'migrations', 'Не настроен каталог миграций');
 assert.match(db.database_id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, 'database_id должен иметь формат UUID');
