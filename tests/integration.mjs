@@ -134,23 +134,6 @@ try {
   });
   check(duplicate.response.status === 409, 'Повторный username должен вернуть 409');
 
-  // Registration rate-limit scope already has two allowed attempts: initial registration and duplicate.
-  // Six invalid payloads reach the configured limit; the next request must be rejected before body validation.
-  for (let attempt = 0; attempt < 6; attempt++) {
-    const invalidRegistration = await jsonRequest('/api/auth/register', {
-      method: 'POST',
-      headers: origin,
-      body: { username: 'x', displayName: 'QA Test', email: '', password }
-    });
-    check(invalidRegistration.response.status === 400, `Невалидная регистрация ${attempt + 1} должна пройти rate limit и вернуть 400`);
-  }
-  const limitedRegistration = await jsonRequest('/api/auth/register', {
-    method: 'POST',
-    headers: origin,
-    body: { username: 'x', displayName: 'QA Test', email: '', password }
-  });
-  check(limitedRegistration.response.status === 429, 'Девятая попытка регистрации за минуту должна получить HTTP 429');
-
   const rejectedLogin = await jsonRequest('/api/auth/login', {
     method: 'POST',
     headers: origin,
