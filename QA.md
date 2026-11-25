@@ -1,7 +1,7 @@
 # QWEMU MUSIC Web Edition — QA report
 
-Дата: 2026-11-24
-Ветка: fix/cloudflare-workers
+Дата: 2026-11-25
+Ветка: fix/cloudflare-preflight-diagnostics (аудит поверх main)
 Цель: проверить отдельную браузерную версию на Cloudflare Workers + Static Assets + D1.
 
 ## 1. Исправления по результатам аудита
@@ -24,7 +24,7 @@
 | Track IDs | Fingerprint не зависит от имени файла и lastModified |
 | Windows | Проверка .assetsignore учитывает LF и CRLF |
 | CI | Проверки выполняются на Linux и Windows |
-| Tests | Добавлены unit- и Worker/D1 integration tests |
+| Tests | Unit- и Worker/D1 integration tests расширены проверками preflight 404, rate limit, login, профиля и метаданных |
 
 ## 2. Тестовый набор
 
@@ -38,7 +38,7 @@
 1. Сборка Pages Functions в Worker bundle.
 2. Проверка синтаксиса Worker, API, frontend, скриптов и тестов.
 3. Smoke-тесты структуры сайта, импортов, Workers config, Static Assets, D1 schema и security markers.
-4. Unit-тесты fingerprint и CloudWriteQueue.
+4. Unit-тесты deployment config/secrets, Worker readiness, workers.dev preflight, fingerprint и CloudWriteQueue.
 5. wrangler deploy --dry-run без публикации.
 
 Команда не запускает локальный HTTP-сервер и интеграционную D1-среду. Это исключает зависимость обычной проверки сборки от доступности локального runtime/портов в CI или Cloudflare build container.
@@ -47,7 +47,7 @@
 
     npm run test:integration
 
-Она применяет миграции к изолированной временной D1, поднимает локальный Worker, проверяет health, API 404, Origin, регистрацию, cookies, сессии, CSRF, конфликты версий, удаление и logout, затем удаляет временную базу.
+Она применяет все миграции к изолированной временной D1, поднимает локальный Worker на свободном TCP-порту, проверяет health, API 404, Origin, rate limit, регистрацию и вход, cookies, независимые сессии, профиль, избранное, настройки, CSRF, конфликты версий, удаление и logout, затем удаляет временную базу.
 
 Полный локальный набор:
 
@@ -75,6 +75,12 @@ GitHub Actions выполняет `npm run check` и `npm run test:integration` 
 | Последовательная запись | Версия строго увеличивается |
 | PUT со старой версией | HTTP 409 с актуальным snapshot |
 | Удаление с актуальной версией | HTTP 200, данные пусты |
+| Rate limit | Девятая регистрационная попытка за минуту — HTTP 429 |
+| Вход с неверным паролем | HTTP 401 |
+| Вход с верным паролем | HTTP 200 и новая пара cookies |
+| Обновление профиля | HTTP 200 с новой версией пользователя |
+| Избранное и настройки | HTTP 200, нормализованные данные сохраняются |
+| Независимые сессии | Logout отзывает только выбранную сессию |
 | Запрос после logout | HTTP 401 |
 
 ## 4. Открытые риски
@@ -89,7 +95,7 @@ GitHub Actions выполняет `npm run check` и `npm run test:integration` 
 | P2 | Browser E2E | Нет теста реального воспроизведения всех форматов на актуальных браузерах |
 | P2 | Восстановление пароля | Нет безопасного почтового процесса и срока действия recovery token |
 | P2 | Удаление аккаунта | Нет пользовательского сценария удаления аккаунта |
-| P2 | Rate-limit cleanup | Отдельная плановая очистка записей ещё не добавлена |
+| P2 | Rate-limit cleanup | Устаревшие записи очищаются при auth-запросах; индекс по window_start ускоряет выборку. Отдельная плановая Cron-очистка пока не добавлена |
 
 ## 5. Ручные проверки перед релизом
 
@@ -115,11 +121,13 @@ GitHub Actions выполняет `npm run check` и `npm run test:integration` 
 - [ ] Workers Builds Root directory: /.
 - [ ] Build command: npm run build.
 - [ ] Deploy command: npx wrangler deploy.
-- [ ] В wrangler.jsonc заменён только production database_id на настоящий D1 UUID.
-- [ ] preview_database_id оставлен стабильным для локальной D1.
-- [ ] Создан secret RATE_LIMIT_SECRET.
-- [ ] Production D1 migrations применены к правильной базе.
-- [ ] Проверены DB binding и secret в Cloudflare Dashboard.
+- [ ] Production UUID добавлен в GitHub Secret `CLOUDFLARE_D1_DATABASE_ID`; в `wrangler.jsonc` остаётся нулевой шаблон.
+- [ ] `preview_database_id` оставлен стабильным для локальной D1.
+- [ ] Добавлены GitHub Secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_D1_DATABASE_ID`, `RATE_LIMIT_SECRET`.
+- [ ] Зарегистрирован `workers.dev` subdomain.
+- [ ] Workflow применил production D1 migrations к правильной базе.
+- [ ] Worker опубликован вместе с `RATE_LIMIT_SECRET` одной версией.
+- [ ] Production `/api/health` подтвердил D1 и сильный rate-limit secret.
 - [ ] После deploy проверены API, авторизация, синхронизация и статика.
 
 Не коммитить секреты, cookies, пароли и production credentials.
@@ -171,8 +179,10 @@ Production deployment не считается проверенным до усп
 
 - Совместимость: существующий непустой RATE_LIMIT_SECRET любой длины продолжает работать; health выдаёт отдельный флаг rateLimitStrong и не вызывает login outage.
 - Новый production deploy требует RATE_LIMIT_SECRET минимум 32 байта и без начальных/конечных пробелов.
-- workers.dev subdomain проверяется read-only через Cloudflare API до remote D1 migrations; при отсутствии поддомена deploy останавливается до изменения production базы.
-- Unit tests покрывают старый короткий secret, новый сильный secret, секрет с пробелами, зарегистрированный/отсутствующий workers.dev subdomain, route-only worker и недостаточные API permissions.
+- workers.dev subdomain проверяется read-only через Cloudflare API до remote D1 migrations; HTTP 404 получает отдельную инструкцию по регистрации, HTTP 403 — диагностику разрешений API Token; D1 при этих ошибках не изменяется.
+- В `0002_rate_limit_window_index.sql` добавлен индекс для очистки старых rate-limit окон.
+- `wrangler.jsonc` тестируется на сохранение нулевого шаблонного production UUID; реальные ID должны передаваться через GitHub Secret.
+- Unit tests покрывают старый короткий secret, новый сильный secret, секрет с пробелами, зарегистрированный/отсутствующий workers.dev subdomain (HTTP 200/404/403), route-only worker и недостаточные API permissions.
 
 - Production deployment использует `wrangler deploy --secrets-file`: Worker не активируется раньше, чем в той же версии окажется RATE_LIMIT_SECRET.
 
