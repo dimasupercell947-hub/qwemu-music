@@ -33,6 +33,17 @@ async function testWorkersSubdomainPreflight() {
     /workers.dev subdomain/
   );
 
+  await assert.rejects(
+    checkWorkersSubdomain({
+      ...base,
+      fetchImpl: async () => new Response(
+        JSON.stringify({ success: false, errors: [{ message: 'No workers.dev subdomain is registered.' }] }),
+        { status: 404 }
+      )
+    }),
+    /HTTP 404.*workers.dev subdomain|workers.dev subdomain.*HTTP 404/i
+  );
+
   const routeOnly = await checkWorkersSubdomain({
     accountId: 'a'.repeat(32),
     config: { workers_dev: false, routes: ['music.example.com/*'] },
